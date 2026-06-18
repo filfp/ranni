@@ -4,11 +4,12 @@
   "description": "Provider-agnostic multi-agent orchestration MCP server",
   "type": "module",
   "files": [
+    "bin",
     "src",
     "templates"
   ],
   "bin": {
-    "ranni": "./src/index.ts"
+    "ranni": "./bin/ranni"
   },
   "scripts": {
     "start": "bun run src/index.ts",
