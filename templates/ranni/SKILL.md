@@ -31,8 +31,8 @@ The orchestrator exposes four MCP tools: `dispatch_task`, `list_active_workers`,
 
 If these tools are not available:
 - Tell the user the ranni MCP server is not running.
-- Instruct them to start it: `bun run node_modules/ranni/src/index.ts`
-- Then instruct them to check `.mcp.json` has the ranni entry (run `bun node_modules/ranni/src/init.ts` if not)
+- Instruct them to start it: `bun run node_modules/ranni-mcp/src/index.ts`
+- Then instruct them to check `.mcp.json` has the ranni entry (run `bun node_modules/ranni-mcp/src/init.ts` if not)
 - Stop here until it is running.
 
 ### 2. Read the current queue state

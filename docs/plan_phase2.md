@@ -5,8 +5,8 @@
 Transform ranni from a local tool into an installable package. A consuming project runs two commands:
 
 ```bash
-bun add ranni
-bun node_modules/ranni/src/init.ts
+bun add ranni-mcp
+bun node_modules/ranni-mcp/src/init.ts
 ```
 
 That's it. The skill, the MCP server config, and the starter `.agents.yaml` are all in place.
@@ -19,7 +19,7 @@ The package is added as a project dependency, not installed globally. The tradeo
 
 | | Local dependency | Global |
 |---|---|---|
-| `.mcp.json` command | `bun run node_modules/ranni/src/index.ts` | `ranni` |
+| `.mcp.json` command | `bun run node_modules/ranni-mcp/src/index.ts` | `ranni` |
 | Version | locked per project | shared across all projects |
 | PATH reliability | always works | fragile in macOS app launches |
 | Dev iteration | `bun link` | same |
@@ -93,7 +93,7 @@ Generated entry:
   "mcpServers": {
     "ranni": {
       "command": "bun",
-      "args": ["run", "node_modules/ranni/src/index.ts"]
+      "args": ["run", "node_modules/ranni-mcp/src/index.ts"]
     }
   }
 }

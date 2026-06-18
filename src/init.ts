@@ -35,19 +35,19 @@ function mergeMcpJson() {
     }
   }
 
-  if (existing.mcpServers?.ranni) {
-    console.log('⚠ .mcp.json already has a "ranni" entry — skipped')
+  if (existing.mcpServers?.['ranni-mcp']) {
+    console.log('⚠ .mcp.json already has a "ranni-mcp" entry — skipped')
     return
   }
 
   existing.mcpServers ??= {}
-  existing.mcpServers.ranni = {
+  existing.mcpServers['ranni-mcp'] = {
     command: 'bun',
-    args: ['run', 'node_modules/ranni/src/index.ts']
+    args: ['run', 'node_modules/ranni-mcp/src/index.ts']
   }
 
   writeFileSync(dest, JSON.stringify(existing, null, 2) + '\n', 'utf8')
-  console.log('✓ .mcp.json updated with ranni MCP server entry')
+  console.log('✓ .mcp.json updated with ranni-mcp MCP server entry')
 }
 
 copySkill()

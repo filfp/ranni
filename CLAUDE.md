@@ -22,8 +22,8 @@ bun run typecheck  # TypeScript type check only
 ## Installing in a project
 
 ```bash
-bun add ranni
-bun node_modules/ranni/src/init.ts
+bun add ranni-mcp
+bun node_modules/ranni-mcp/src/init.ts
 ```
 
 `init` writes three things into the consuming project:
@@ -179,7 +179,7 @@ Add to `.claude/settings.local.json`:
   "mcpServers": {
     "ranni": {
       "command": "bun",
-      "args": ["run", "node_modules/ranni/src/index.ts"]
+      "args": ["run", "node_modules/ranni-mcp/src/index.ts"]
     }
   }
 }

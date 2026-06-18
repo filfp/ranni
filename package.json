@@ -1,5 +1,5 @@
 {
-  "name": "ranni",
+  "name": "ranni-mcp",
   "version": "0.1.0",
   "description": "Provider-agnostic multi-agent orchestration MCP server",
   "type": "module",
@@ -9,12 +9,12 @@
     "templates"
   ],
   "bin": {
-    "ranni": "./bin/ranni.js"
+    "ranni-mcp": "./bin/ranni-mcp.js"
   },
   "scripts": {
     "start": "bun run src/index.ts",
     "init": "bun run src/init.ts",
-    "build": "bun build --compile src/index.ts --outfile dist/ranni",
+    "build": "bun build --compile src/index.ts --outfile dist/ranni-mcp",
     "typecheck": "tsc --noEmit",
     "publish": "bun run scripts/publish.ts"
   },

@@ -55,7 +55,7 @@ async function main() {
 
   setInterval(tickPool, 200)
 
-  const server = new Server({ name: 'ranni', version: '0.1.0' }, { capabilities: { tools: {} } })
+  const server = new Server({ name: 'ranni-mcp', version: '0.1.0' }, { capabilities: { tools: {} } })
 
   const footer = formatFooter(config.manager_context ?? DEFAULT_MANAGER_CONTEXT)
 

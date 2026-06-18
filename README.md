@@ -37,8 +37,8 @@ The task queue is a plain JSON file on disk. It survives reboots, is manually ed
 ## Install
 
 ```bash
-bun add ranni
-bun node_modules/ranni/src/init.ts
+bun add ranni-mcp
+bun node_modules/ranni-mcp/src/init.ts
 ```
 
 `init` writes three things into your project:
