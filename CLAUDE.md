@@ -13,10 +13,23 @@ Provider-agnostic multi-agent orchestration MCP server. Exposes four MCP tools t
 ## Commands
 
 ```bash
-bun run src/index.ts   # start the MCP server (development)
-bun run build          # compile to a single binary at dist/ranni
-bun run typecheck      # TypeScript type check only
+bun run start      # start the MCP server (development)
+bun run init       # scaffold templates into the current directory (dev/testing)
+bun run build      # compile to a single binary at dist/ranni
+bun run typecheck  # TypeScript type check only
 ```
+
+## Installing in a project
+
+```bash
+bun add ranni
+bun node_modules/ranni/src/init.ts
+```
+
+`init` writes three things into the consuming project:
+- `.claude/skills/ranni/` — the manager skill (always overwrites)
+- `.agents.yaml` — starter config (skipped if already exists)
+- `.mcp.json` — merges in the ranni entry, preserving all existing entries
 
 ## Configuration
 
