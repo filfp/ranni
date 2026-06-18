@@ -11,7 +11,7 @@ export function initRun(config: Config, configDir: string): RunLogger | null {
   if (!config.persist_runs) return null
 
   const ts = new Date().toISOString().replace(/[:.]/g, '-')
-  const runDir = join(configDir, 'tools', 'orchestrator', 'runs', ts)
+  const runDir = join(configDir, 'tools', 'ranni', 'runs', ts)
   mkdirSync(runDir, { recursive: true })
 
   return {

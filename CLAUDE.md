@@ -1,4 +1,4 @@
-# orchestrator
+# ranni
 
 Provider-agnostic multi-agent orchestration MCP server. Exposes four MCP tools that let a manager agent (Claude Code, Codex, Copilot) dispatch autonomous worker subprocesses, track their progress via a file-backed task queue, and receive results when workers finish, need help, or error.
 
@@ -14,7 +14,7 @@ Provider-agnostic multi-agent orchestration MCP server. Exposes four MCP tools t
 
 ```bash
 bun run src/index.ts   # start the MCP server (development)
-bun run build          # compile to a single binary at dist/orchestrator
+bun run build          # compile to a single binary at dist/ranni
 bun run typecheck      # TypeScript type check only
 ```
 
@@ -28,7 +28,7 @@ worker:
   args: [--print, --dangerously-skip-permissions]
 
 max_workers: 3
-persist_runs: false   # set true to archive full worker stdout under tools/orchestrator/runs/
+persist_runs: false   # set true to archive full worker stdout under tools/ranni/runs/
 
 dirs:
   backend: ./backend
@@ -46,7 +46,7 @@ All `dirs` values are resolved to absolute paths at startup; an error is thrown 
 ## Runtime files
 
 - `.agent-queue.json` — task queue state, written at repo root alongside `.agents.yaml` (gitignored)
-- `tools/orchestrator/runs/<timestamp>/` — worker output archives when `persist_runs: true` (gitignored)
+- `tools/ranni/runs/<timestamp>/` — worker output archives when `persist_runs: true` (gitignored)
   - `summary.json` — all tasks with statuses and results
   - `<task-id>.txt` — full stdout of each worker
 
@@ -119,7 +119,7 @@ Every worker must end its output with this block as the very last thing written:
 - `files_changed`: paths relative to the worker's `cwd` (the resolved `dir`)
 - `message`: required for `needs_help` and `error`; optional for `done`
 
-If the marker is absent, the orchestrator synthesises an `error` result from the last 2000 chars of stdout.
+If the marker is absent, ranni synthesises an `error` result from the last 2000 chars of stdout.
 
 ## Task dependencies
 
@@ -135,7 +135,7 @@ The orchestrator skips a `pending` task until every ID in `depends_on` has statu
 
 ## Conflict detection
 
-When a worker finishes and its `files_changed` overlap with files already touched by a different task, the orchestrator:
+When a worker finishes and its `files_changed` overlap with files already touched by a different task, ranni:
 
 1. Flips the original task to `done_with_conflict`
 2. Generates a `git diff HEAD -- <file>` for each conflicting file
@@ -164,9 +164,9 @@ Add to `.claude/settings.local.json`:
 ```json
 {
   "mcpServers": {
-    "orchestrator": {
+    "ranni": {
       "command": "bun",
-      "args": ["run", "<absolute-path-to>/src/index.ts"]
+      "args": ["run", "node_modules/ranni/src/index.ts"]
     }
   }
 }

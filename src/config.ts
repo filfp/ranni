@@ -31,7 +31,7 @@ export function loadConfig(startDir = process.cwd()): { config: Config; configDi
   if (!configDir) {
     throw new Error(
       `No .agents.yaml found. Walk from "${startDir}" to git root found nothing.\n` +
-        `Create .agents.yaml at your repo root. See docs/ORCHESTRATOR.md for the format.`
+        `Create .agents.yaml at your repo root. Run: bunx ranni init`
     )
   }
 
