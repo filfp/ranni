@@ -1,0 +1,23 @@
+{
+  "name": "@codeleap/orchestrator",
+  "version": "0.1.0",
+  "description": "Provider-agnostic multi-agent orchestration MCP server",
+  "type": "module",
+  "bin": {
+    "orchestrator": "./dist/orchestrator"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build --compile src/index.ts --outfile dist/orchestrator",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "yaml": "^2.4.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.4.0"
+  }
+}
