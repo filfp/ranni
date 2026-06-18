@@ -14,7 +14,8 @@
     "start": "bun run src/index.ts",
     "init": "bun run src/init.ts",
     "build": "bun build --compile src/index.ts --outfile dist/ranni",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "publish": "bun run scripts/publish.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
