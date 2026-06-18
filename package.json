@@ -2,6 +2,10 @@
   "name": "ranni-mcp",
   "version": "0.1.1",
   "description": "Provider-agnostic multi-agent orchestration MCP server",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/filfp/ranni.git"
+  },
   "type": "module",
   "files": [
     "bin",
