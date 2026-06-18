@@ -9,7 +9,7 @@
     "templates"
   ],
   "bin": {
-    "ranni": "./bin/ranni"
+    "ranni": "./bin/ranni.js"
   },
   "scripts": {
     "start": "bun run src/index.ts",
