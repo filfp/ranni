@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Provider-agnostic multi-agent orchestration MCP server",
   "type": "module",
+  "files": [
+    "src",
+    "templates"
+  ],
   "bin": {
     "ranni": "./src/index.ts"
   },

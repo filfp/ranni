@@ -1,0 +1,60 @@
+name: Tag release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  tag:
+    name: Create release tag on version bump
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect version bump and push tag
+        id: tag
+        run: |
+          prev=$(git show HEAD~1:package.json 2>/dev/null \
+            | grep '"version"' \
+            | sed 's/.*"version": *"\([^"]*\)".*/\1/' || echo "")
+          curr=$(grep '"version"' package.json \
+            | sed 's/.*"version": *"\([^"]*\)".*/\1/')
+
+          if [ -z "$curr" ]; then
+            echo "Could not read current version — skipping."
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$prev" = "$curr" ]; then
+            echo "No version bump detected (both at $curr) — skipping."
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          tag="v${curr}"
+          echo "Version bumped: $prev → $curr. Creating tag $tag."
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$tag"
+          git push origin "$tag"
+          echo "Tag $tag pushed."
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch publish workflow
+        if: steps.tag.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          gh workflow run publish-npm.yml --ref "refs/tags/${tag}"
+          echo "Dispatched publish-npm.yml at ${tag}."
