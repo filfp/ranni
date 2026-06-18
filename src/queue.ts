@@ -43,7 +43,12 @@ export function enqueue(
 
 export function startNext(path: string): Task | null {
   const queue = readQueue(path)
-  const doneIds = new Set(queue.tasks.filter(t => t.status === 'done').map(t => t.id))
+  // A done task with a PR only satisfies depends_on after the PR lands in base_branch
+  const doneIds = new Set(
+    queue.tasks
+      .filter(t => t.status === 'done' && (!t.pr_branch || t.pr_merged === true))
+      .map(t => t.id)
+  )
 
   const idx = queue.tasks.findIndex(t => {
     if (t.status !== 'pending') return false
@@ -83,6 +88,43 @@ export function markConflict(path: string, id: string): void {
     task.status = 'done_with_conflict'
     writeQueue(path, queue)
   }
+}
+
+export function markAwaitingReview(path: string, id: string, prUrl: string, branch: string): void {
+  const queue = readQueue(path)
+  const task = queue.tasks.find(t => t.id === id)
+  if (!task) return
+  task.status = 'awaiting_review'
+  task.pr_branch = branch
+  task.pr_merged = false
+  if (task.result) task.result.pr_url = prUrl
+  writeQueue(path, queue)
+}
+
+// Called when the PR lands. Moves awaiting_review → done; for already-done tasks just sets the flag.
+export function markPRMerged(path: string, id: string): void {
+  const queue = readQueue(path)
+  const task = queue.tasks.find(t => t.id === id)
+  if (!task) return
+  task.pr_merged = true
+  if (task.status === 'awaiting_review') task.status = 'done'
+  writeQueue(path, queue)
+}
+
+export function updatePrCommentCursor(path: string, id: string, cursor: string): void {
+  const queue = readQueue(path)
+  const task = queue.tasks.find(t => t.id === id)
+  if (!task) return
+  task.pr_comment_cursor = cursor
+  writeQueue(path, queue)
+}
+
+export function autoAcknowledge(path: string, id: string): void {
+  const queue = readQueue(path)
+  const task = queue.tasks.find(t => t.id === id)
+  if (!task) return
+  task.acknowledged = true
+  writeQueue(path, queue)
 }
 
 export function resetInterrupted(path: string): void {
@@ -126,14 +168,12 @@ export function getPendingResults(path: string, drain: boolean): Task[] {
 export function getSnapshot(path: string): {
   running: Task[]
   queued: Task[]
-  slots_free: number
-  max_workers: number
+  awaiting: Task[]
 } {
   const queue = readQueue(path)
   return {
     running: queue.tasks.filter(t => t.status === 'running'),
     queued: queue.tasks.filter(t => t.status === 'pending'),
-    slots_free: 0,
-    max_workers: 0
+    awaiting: queue.tasks.filter(t => t.status === 'awaiting_review')
   }
 }

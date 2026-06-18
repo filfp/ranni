@@ -4,16 +4,20 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { loadConfig } from './config.js';
 import { detectConflict, handleConflict } from './conflict.js';
 import {
+    autoAcknowledge,
     cancelTask,
     complete,
     enqueue,
     getPendingResults,
     getSnapshot,
+    markAwaitingReview,
     queuePath,
     readQueue,
     resetInterrupted,
-    startNext
+    startNext,
+    writeQueue
 } from './queue.js';
+import { commitAndOpenPR, pollPRStatus, pushToPRBranch } from './pr.js';
 import { initRun } from './runs.js';
 import type { Config, Task } from './types.js';
 import { runWorker } from './worker.js';
@@ -23,7 +27,8 @@ const DEFAULT_MANAGER_CONTEXT = `ORCHESTRATOR RULES (read before every action):
 2. Each task must be self-contained: include all file paths, context, and background the worker needs.
 3. Use depends_on when task B genuinely needs task A's output to be on disk first.
 4. When a worker returns needs_help, surface the question to the user before dispatching a follow-up.
-5. When a worker returns error, decide: retry, dispatch a corrected version, or inform the user.`
+5. When a worker returns error, decide: retry, dispatch a corrected version, or inform the user.
+6. Tasks in awaiting_review are waiting for their PR to be merged — do not cancel them.`
 
 function formatFooter(managerContext: string): string {
   return `\n\n---\n${managerContext}`
@@ -38,7 +43,7 @@ async function main() {
 
   let activeCount = 0
 
-  async function tickPool() {
+  function tickPool() {
     const available = config.max_workers - activeCount
     if (available <= 0) return
 
@@ -54,6 +59,17 @@ async function main() {
   }
 
   setInterval(tickPool, 200)
+
+  if (config.git?.auto_pr) {
+    setInterval(() => {
+      pollPRStatus(qPath, config, tasks => {
+        enqueue(qPath, tasks)
+        tickPool()
+      }).catch(err => {
+        process.stderr.write(`[ranni] Poll error: ${err}\n`)
+      })
+    }, 60_000)
+  }
 
   const server = new Server({ name: 'ranni-mcp', version: '0.1.0' }, { capabilities: { tools: {} } })
 
@@ -105,7 +121,7 @@ async function main() {
       },
       {
         name: 'list_active_workers',
-        description: 'Snapshot of the current queue: running workers, pending tasks, and free slots.',
+        description: 'Snapshot of the current queue: running workers, pending tasks, and PRs awaiting review.',
         inputSchema: { type: 'object', properties: {} }
       },
       {
@@ -176,18 +192,22 @@ async function main() {
       case 'list_active_workers': {
         const snapshot = getSnapshot(qPath)
         const runningList = snapshot.running
-          .map(t => `  [running] ${t.id} (${t.dir}) — started ${t.started_at}`)
+          .map(t => `  [running]         ${t.id} (${t.dir}) — started ${t.started_at}`)
           .join('\n')
         const queuedList = snapshot.queued
           .map(
             t =>
-              `  [queued]  ${t.id} (${t.dir})${t.depends_on?.length ? ` — waiting on: ${t.depends_on.join(', ')}` : ''}`
+              `  [queued]          ${t.id} (${t.dir})${t.depends_on?.length ? ` — waiting on: ${t.depends_on.join(', ')}` : ''}`
           )
+          .join('\n')
+        const awaitingList = snapshot.awaiting
+          .map(t => `  [awaiting_review] ${t.id} (${t.dir}) — ${t.result?.pr_url ?? 'PR pending'}`)
           .join('\n')
         const lines = [
           `Workers: ${activeCount}/${config.max_workers} active`,
           runningList || '  (none running)',
-          queuedList || '  (queue empty)'
+          queuedList || '  (queue empty)',
+          awaitingList || '  (no PRs awaiting review)'
         ].join('\n')
         return { content: [{ type: 'text', text: lines + footer }] }
       }
@@ -207,7 +227,8 @@ async function main() {
             const summary = r ? r.summary : '(no summary)'
             const files = r?.files_changed?.length ? `\n  Files: ${r.files_changed.join(', ')}` : ''
             const msg = r?.message ? `\n  Message: ${r.message}` : ''
-            return `[${status.toUpperCase()}] ${t.id} (${t.dir})\n  ${summary}${files}${msg}`
+            const pr = r?.pr_url ? `\n  PR: ${r.pr_url}` : ''
+            return `[${status.toUpperCase()}] ${t.id} (${t.dir})\n  ${summary}${files}${msg}${pr}`
           })
           .join('\n\n')
 
@@ -247,11 +268,39 @@ async function runWorkerAsync(
 
     runLogger?.updateSummary(readQueue(qPath).tasks)
 
-    const queue = readQueue(qPath)
-    const conflict = detectConflict(result, queue, task.id)
+    const resolvedDir = config.dirs[task.dir]!
+
+    const conflict = detectConflict(result, readQueue(qPath), task.id)
     if (conflict) {
-      const resolvedDir = config.dirs[task.dir]!
       await handleConflict(qPath, task, conflict, resolvedDir)
+    }
+
+    if (task.parent_task_id && result.status === 'done') {
+      // Correction worker: push changes to the parent task's existing PR branch
+      const parentTask = readQueue(qPath).tasks.find(t => t.id === task.parent_task_id)
+      if (parentTask?.pr_branch) {
+        await pushToPRBranch(task, result, resolvedDir, parentTask.pr_branch)
+      }
+      autoAcknowledge(qPath, task.id)
+    } else if (!task.parent_task_id && result.status === 'done') {
+      // Normal worker: open a PR, then either babysit it or just record the URL
+      const pr = await commitAndOpenPR(task, result, config, resolvedDir)
+      if (pr) {
+        if (config.git?.await_merge) {
+          markAwaitingReview(qPath, task.id, pr.prUrl, pr.branch)
+        } else {
+          // PR created, task stays done — store url+branch and mark unmerged so
+          // depends_on chains wait for the poll to confirm the PR landed
+          const q = readQueue(qPath)
+          const t = q.tasks.find(x => x.id === task.id)
+          if (t) {
+            t.pr_branch = pr.branch
+            t.pr_merged = false
+            if (t.result) t.result.pr_url = pr.prUrl
+            writeQueue(qPath, q)
+          }
+        }
+      }
     }
 
     if (runLogger) {

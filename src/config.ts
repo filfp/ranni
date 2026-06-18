@@ -4,6 +4,13 @@ import { parse } from 'yaml';
 import { z } from 'zod';
 import type { Config } from './types.js';
 
+const GitConfigSchema = z.object({
+  auto_pr: z.boolean().default(true),
+  branch_prefix: z.string().default('ranni'),
+  base_branch: z.string().default('main'),
+  await_merge: z.boolean().default(false)
+})
+
 const ConfigSchema = z.object({
   worker: z.object({
     command: z.string(),
@@ -11,6 +18,7 @@ const ConfigSchema = z.object({
   }),
   max_workers: z.number().int().min(1).default(3),
   persist_runs: z.boolean().default(false),
+  git: GitConfigSchema.optional(),
   dirs: z.record(z.string()),
   manager_context: z.string().optional()
 })

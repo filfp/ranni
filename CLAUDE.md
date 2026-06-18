@@ -43,6 +43,14 @@ worker:
 max_workers: 3
 persist_runs: false   # set true to archive full worker stdout under tools/ranni/runs/
 
+# Optional — commit each finished task to its own branch and open a PR.
+# Requires git and gh CLI. pr_url is included in get_pending_results output.
+# git:
+#   auto_pr: true          # default true when this block is present
+#   branch_prefix: ranni   # branch name: <prefix>/<task-id>
+#   base_branch: main
+#   await_merge: false     # set true to babysit: poll for merge + relay review comments to correction workers
+
 dirs:
   backend: ./backend
   mobile: ./apps/mobile
@@ -69,11 +77,16 @@ All `dirs` values are resolved to absolute paths at startup; an error is thrown 
 |--------|---------|
 | `pending` | In the queue, not yet started |
 | `running` | A worker subprocess is active |
-| `done` | Worker exited successfully |
+| `done` | Worker exited successfully (and PR merged, if `auto_pr` is enabled) |
+| `awaiting_review` | PR opened; ranni is polling for merge or new comments |
 | `done_with_conflict` | Worker finished but touched a file another worker already modified; a resolution task was auto-dispatched |
 | `needs_help` | Worker could not proceed — manager must read and act |
 | `error` | Worker failed — manager may retry or cancel |
 | `cancelled` | Removed before it ran |
+
+**`depends_on` and PRs**: when `auto_pr` is enabled, a task only satisfies a `depends_on` dependency after its PR has been confirmed merged — regardless of `await_merge`. The poll (60s interval) checks `gh pr view` to detect the merge and set `pr_merged: true`. This prevents dependent workers from writing on top of unmerged code.
+
+With `await_merge: true`, the task additionally holds `awaiting_review` status until the PR merges and review comments trigger correction workers on the same branch.
 
 Tasks marked `running` at startup (from a crashed session) are reset to `pending` automatically.
 
