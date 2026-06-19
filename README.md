@@ -63,6 +63,14 @@ worker:
 max_workers: 3
 persist_runs: false   # set true to archive full worker stdout
 
+# Optional — commit each finished task to its own branch and open a PR.
+# Requires git and gh CLI.
+# git:
+#   auto_pr: true          # create a branch + PR per finished task
+#   branch_prefix: ranni   # branch name: <prefix>/<task-id>
+#   base_branch: main
+#   await_merge: false     # set true to babysit the PR (see below)
+
 dirs:
   root: .
   backend: ./backend
@@ -83,7 +91,7 @@ dirs:
 | Tool | Description |
 |------|-------------|
 | `dispatch_task` | Push one or more tasks onto the queue |
-| `list_active_workers` | Snapshot of running + queued tasks |
+| `list_active_workers` | Snapshot of running, queued, and awaiting-review tasks |
 | `get_pending_results` | Read completed results (drains buffer by default) |
 | `cancel_task` | Cancel a pending task by ID |
 
@@ -98,7 +106,7 @@ dirs:
     context?: string       // optional background, constraints
     links?: string[]       // URLs the worker should read first (tickets, PRs, docs)
     relevant_files?: string[]  // files already identified — worker starts here
-    depends_on?: string[]  // task IDs that must be "done" before this starts
+    depends_on?: string[]  // task IDs that must be done before this starts
   }>
 }
 ```
@@ -127,7 +135,8 @@ If the marker is absent (crash, unexpected exit), ranni synthesises an `error` r
 |--------|---------|
 | `pending` | Queued, not yet started |
 | `running` | Worker subprocess active |
-| `done` | Completed successfully |
+| `done` | Completed successfully (and PR merged, if `auto_pr` is enabled) |
+| `awaiting_review` | PR open — ranni is polling for merge or new comments (`await_merge` only) |
 | `done_with_conflict` | Done, but touched a file another worker already modified — resolution task auto-dispatched |
 | `needs_help` | Worker could not proceed — manager must act |
 | `error` | Worker failed — manager may retry or cancel |
@@ -148,6 +157,50 @@ Tasks left in `running` state from a crashed session are automatically reset to 
 
 Ranni skips a task until every ID in `depends_on` has status `done`. IDs not found in the queue are treated as satisfied (completed in a prior session).
 
+**With `auto_pr` enabled**, a dependency is only considered satisfied once its PR has been confirmed merged — regardless of `await_merge`. This prevents dependent workers from writing on top of code that hasn't landed in the base branch yet.
+
+---
+
+## PR workflow
+
+Enable the `git` block in `.agents.yaml` to have ranni manage branches and PRs automatically.
+
+### `auto_pr: true`
+
+After each worker finishes successfully, ranni:
+
+1. Creates a branch `<branch_prefix>/<task-id>` from `base_branch`
+2. Commits only that task's changed files
+3. Pushes and opens a PR via `gh pr create`
+4. Stores the PR URL in the task result (visible in `get_pending_results`)
+
+The task is marked `done` immediately. `depends_on` chains wait for the PR to merge before the dependent task is scheduled.
+
+### `await_merge: true`
+
+Enables full babysitting on top of `auto_pr`:
+
+- Task status becomes `awaiting_review` instead of `done` while the PR is open
+- Ranni polls GitHub every 60 seconds:
+  - **PR merged** → task moves to `done`; dependent tasks can now start
+  - **PR closed** → task moves to `error`
+  - **New review comment** → a correction worker is dispatched automatically; it applies the requested changes and pushes to the same branch
+
+Correction workers are internal — they don't appear in `get_pending_results` unless they fail. The original task stays `awaiting_review` throughout.
+
+```
+worker done → PR opened → awaiting_review
+                               │
+                    ┌──────────┴──────────┐
+                    │                     │
+              new comment            PR merged
+                    │                     │
+            correction worker         task done
+            pushes to same branch
+```
+
+Requires `git` and [`gh`](https://cli.github.com) CLI available in the worker environment.
+
 ---
 
 ## Runtime files
@@ -161,3 +214,4 @@ Ranni skips a task until every ID in `depends_on` has status `done`. IDs not fou
 
 - [Bun](https://bun.sh) ≥ 1.0
 - A Claude Code (or compatible) setup with MCP support
+- [`gh`](https://cli.github.com) CLI — only required when `git.auto_pr: true`
