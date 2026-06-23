@@ -1,0 +1,26 @@
+worker:
+  command: claude
+  args: [--print, --dangerously-skip-permissions]
+
+max_workers: 3
+persist_runs: false
+
+# Optional — commit each finished task to its own branch and open a PR.
+# Requires git and gh CLI. Each task gets a branch named <branch_prefix>/<task-id>.
+# git:
+#   auto_pr: true
+#   branch_prefix: ranni
+#   base_branch: main
+#   await_merge: false  # set true to babysit the PR: poll for merge and relay review comments back to workers
+#   poll_interval: 60   # seconds between PR polls (default 60, min 5)
+
+dirs:
+  root: .
+  # Add your project directories:
+  # backend: ./backend
+  # web: ./apps/web
+  # mobile: ./apps/mobile
+
+# Optional — injected into every MCP tool response as a reminder to the manager
+# manager_context: |
+#   Always call get_pending_results() before dispatching new tasks.

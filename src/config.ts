@@ -8,7 +8,8 @@ const GitConfigSchema = z.object({
   auto_pr: z.boolean().default(true),
   branch_prefix: z.string().default('ranni'),
   base_branch: z.string().default('main'),
-  await_merge: z.boolean().default(false)
+  await_merge: z.boolean().default(false),
+  poll_interval: z.number().int().min(5).default(60) // seconds between PR polls (merge detection + comment relay)
 })
 
 const ConfigSchema = z.object({

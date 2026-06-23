@@ -70,6 +70,7 @@ persist_runs: false   # set true to archive full worker stdout
 #   branch_prefix: ranni   # branch name: <prefix>/<task-id>
 #   base_branch: main
 #   await_merge: false     # set true to babysit the PR (see below)
+#   poll_interval: 60      # seconds between PR polls (default 60, min 5)
 
 dirs:
   root: .
@@ -107,6 +108,7 @@ dirs:
     links?: string[]       // URLs the worker should read first (tickets, PRs, docs)
     relevant_files?: string[]  // files already identified — worker starts here
     depends_on?: string[]  // task IDs that must be done before this starts
+    priority?: number      // higher runs first among eligible pending tasks (default 0)
   }>
 }
 ```
@@ -181,12 +183,14 @@ The task is marked `done` immediately. `depends_on` chains wait for the PR to me
 Enables full babysitting on top of `auto_pr`:
 
 - Task status becomes `awaiting_review` instead of `done` while the PR is open
-- Ranni polls GitHub every 60 seconds:
+- Ranni polls GitHub every `poll_interval` seconds (default 60):
   - **PR merged** → task moves to `done`; dependent tasks can now start
   - **PR closed** → task moves to `error`
   - **New review comment** → a correction worker is dispatched automatically; it applies the requested changes and pushes to the same branch
 
-Correction workers are internal — they don't appear in `get_pending_results` unless they fail. The original task stays `awaiting_review` throughout.
+Polling is done by ranni itself, not by the worker — workers run one-shot in `--print` mode and never sit waiting on a PR. While a PR is `awaiting_review`, the pool keeps running other tasks; nothing blocks unless a `depends_on` chain is waiting for that PR to merge.
+
+Correction workers are dispatched at **high priority**, so they jump ahead of the pending backlog and the open PR keeps moving instead of waiting its turn. They're internal — they don't appear in `get_pending_results` unless they fail. The original task stays `awaiting_review` throughout.
 
 ```
 worker done → PR opened → awaiting_review
