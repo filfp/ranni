@@ -50,18 +50,27 @@ export function startNext(path: string): Task | null {
       .map(t => t.id)
   )
 
-  const idx = queue.tasks.findIndex(t => {
+  const isEligible = (t: Task) => {
     if (t.status !== 'pending') return false
     if (!t.depends_on || t.depends_on.length === 0) return true
     return t.depends_on.every(dep => doneIds.has(dep))
-  })
+  }
 
-  if (idx === -1) return null
+  // Highest priority first; ties broken by queue order (earliest enqueued).
+  let pick = -1
+  for (let i = 0; i < queue.tasks.length; i++) {
+    if (!isEligible(queue.tasks[i]!)) continue
+    if (pick === -1 || (queue.tasks[i]!.priority ?? 0) > (queue.tasks[pick]!.priority ?? 0)) {
+      pick = i
+    }
+  }
 
-  queue.tasks[idx]!.status = 'running'
-  queue.tasks[idx]!.started_at = new Date().toISOString()
+  if (pick === -1) return null
+
+  queue.tasks[pick]!.status = 'running'
+  queue.tasks[pick]!.started_at = new Date().toISOString()
   writeQueue(path, queue)
-  return queue.tasks[idx]!
+  return queue.tasks[pick]!
 }
 
 export function complete(path: string, id: string, result: WorkerResult): void {
@@ -173,7 +182,10 @@ export function getSnapshot(path: string): {
   const queue = readQueue(path)
   return {
     running: queue.tasks.filter(t => t.status === 'running'),
-    queued: queue.tasks.filter(t => t.status === 'pending'),
+    // Shown in scheduling order: highest priority first, then enqueue order.
+    queued: queue.tasks
+      .filter(t => t.status === 'pending')
+      .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0)),
     awaiting: queue.tasks.filter(t => t.status === 'awaiting_review')
   }
 }

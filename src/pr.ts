@@ -173,6 +173,10 @@ async function doPushToPRBranch(
 
 type CorrectionTask = Omit<Task, 'status' | 'created_at' | 'started_at' | 'finished_at' | 'result' | 'acknowledged'>
 
+// Review feedback is time-sensitive: a correction worker jumps ahead of the
+// normal backlog so the open PR moves forward instead of waiting its turn.
+const CORRECTION_PRIORITY = 100
+
 export async function pollPRStatus(
   qPath: string,
   config: Config,
@@ -249,10 +253,11 @@ export async function pollPRStatus(
         dir: task.dir,
         task: buildCorrectionPrompt(task, commentsText),
         context: task.context,
-        parent_task_id: task.id
+        parent_task_id: task.id,
+        priority: CORRECTION_PRIORITY
       }])
 
-      process.stderr.write(`[ranni] ${newComments.length} new comment(s) on ${task.id} — dispatching ${correctionId}\n`)
+      process.stderr.write(`[ranni] ${newComments.length} new comment(s) on ${task.id} — dispatching ${correctionId} (priority)\n`)
     } catch (err) {
       process.stderr.write(`[ranni] Poll error for ${task.id}: ${err}\n`)
     }

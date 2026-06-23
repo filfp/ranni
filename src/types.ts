@@ -17,6 +17,7 @@ export type Task = {
   links?: string[]
   relevant_files?: string[]
   depends_on?: string[]
+  priority?: number           // higher runs first among eligible pending tasks (default 0). Comment-correction tasks are dispatched with high priority so they preempt the backlog.
   created_at: string
   started_at: string | null
   finished_at: string | null
@@ -49,6 +50,7 @@ export type GitConfig = {
   branch_prefix: string
   base_branch: string
   await_merge: boolean
+  poll_interval: number  // seconds between PR polls
 }
 
 export type Config = {

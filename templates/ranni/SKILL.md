@@ -149,7 +149,8 @@ dispatch_task({
       context: "Optional: file paths, background, constraints",
       links: ["https://notion.so/..."],
       relevant_files: ["src/screens/Foo.tsx"],
-      depends_on: ["other-task-id"]
+      depends_on: ["other-task-id"],
+      priority: 0  // optional: higher runs first among eligible pending tasks
     }
   ]
 })

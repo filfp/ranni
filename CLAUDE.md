@@ -50,6 +50,7 @@ persist_runs: false   # set true to archive full worker stdout under tools/ranni
 #   branch_prefix: ranni   # branch name: <prefix>/<task-id>
 #   base_branch: main
 #   await_merge: false     # set true to babysit: poll for merge + relay review comments to correction workers
+#   poll_interval: 60      # seconds between PR polls (default 60, min 5)
 
 dirs:
   backend: ./backend
@@ -84,7 +85,7 @@ All `dirs` values are resolved to absolute paths at startup; an error is thrown 
 | `error` | Worker failed — manager may retry or cancel |
 | `cancelled` | Removed before it ran |
 
-**`depends_on` and PRs**: when `auto_pr` is enabled, a task only satisfies a `depends_on` dependency after its PR has been confirmed merged — regardless of `await_merge`. The poll (60s interval) checks `gh pr view` to detect the merge and set `pr_merged: true`. This prevents dependent workers from writing on top of unmerged code.
+**`depends_on` and PRs**: when `auto_pr` is enabled, a task only satisfies a `depends_on` dependency after its PR has been confirmed merged — regardless of `await_merge`. The poll (every `git.poll_interval` seconds, default 60) checks `gh pr view` to detect the merge and set `pr_merged: true`. This prevents dependent workers from writing on top of unmerged code.
 
 With `await_merge: true`, the task additionally holds `awaiting_review` status until the PR merges and review comments trigger correction workers on the same branch.
 
@@ -104,6 +105,7 @@ input: {
     links?: string[]      // URLs to read first (tickets, PRs, docs)
     relevant_files?: string[]  // file paths the manager already identified
     depends_on?: string[] // task IDs that must be "done" before this starts
+    priority?: number     // higher runs first among eligible pending tasks (default 0)
   }>
 }
 ```

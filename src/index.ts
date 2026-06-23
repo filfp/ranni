@@ -61,6 +61,7 @@ async function main() {
   setInterval(tickPool, 200)
 
   if (config.git?.auto_pr) {
+    const pollIntervalMs = config.git.poll_interval * 1000
     setInterval(() => {
       pollPRStatus(qPath, config, tasks => {
         enqueue(qPath, tasks)
@@ -68,7 +69,7 @@ async function main() {
       }).catch(err => {
         process.stderr.write(`[ranni] Poll error: ${err}\n`)
       })
-    }, 60_000)
+    }, pollIntervalMs)
   }
 
   const server = new Server({ name: 'ranni-mcp', version: '0.1.0' }, { capabilities: { tools: {} } })
@@ -109,6 +110,11 @@ async function main() {
                     type: 'array',
                     items: { type: 'string' },
                     description: 'Task IDs that must be done before this starts'
+                  },
+                  priority: {
+                    type: 'number',
+                    description:
+                      'Higher runs first among eligible pending tasks (default 0). Use to push an urgent task ahead of the backlog.'
                   }
                 },
                 required: ['id', 'dir', 'task']
@@ -161,6 +167,7 @@ async function main() {
           links?: string[]
           relevant_files?: string[]
           depends_on?: string[]
+          priority?: number
         }>
 
         const unknownDirs = tasks.filter(t => !config.dirs[t.dir]).map(t => t.dir)
