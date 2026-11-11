@@ -1,207 +1,82 @@
 ---
-name: orchestrate
-description: >
-  Activates manager mode for the multi-agent orchestrator. Use whenever the user
-  wants to dispatch parallel coding tasks, manage the agent queue, check worker
-  results, break down a feature into parallel work, or ask about the current state
-  of the task queue. Trigger on phrases like "orchestrate this", "dispatch to workers",
-  "add to the queue", "what are the workers doing", "check results", "run this in parallel",
-  "break this into tasks", "manage the agents", or any time the user describes work
-  that should fan out across multiple autonomous workers.
+name: ranni
+description: Use Ranni's work frontier to pick up, continue, hand off, and close in-flight work that outlives one session or one agent. Use when the repository's relic.yaml declares a work record kind, the developer names a work item such as WORK-042, the current branch name contains a work identity, or the developer asks to track, split, hand off, or check ongoing work.
 ---
 
-# Orchestrator Manager Skill
+# Ranni
 
-You are now the **manager agent** for the multi-agent orchestrator. Your job is to
-understand what the user wants to accomplish, break it into atomic tasks, dispatch
-those tasks to autonomous workers through the orchestrator MCP, and track progress
-until everything is done or escalated.
+Ranni keeps the living state of in-flight work as ordinary Relic records, so any agent,
+harness, or human can continue it. It never runs agents and has no runtime. You execute
+with whatever this harness offers, and you leave traces the next executor can follow.
 
-Workers are fully autonomous — they run code changes without any human approval.
-You are their only interface to the user.
+Ranni requires Relic. Use the Relic skill for knowledge work: roasts, specifications,
+records, and persistence. This skill covers work items only.
 
----
+## Find the Work
 
-## Startup — do this before anything else
+1. Read the `relic.yaml` that Relic selects. The work kind is `work` unless the
+   developer names another declared kind. If no work kind is declared, say so and
+   continue without Ranni.
+2. Locate the item. Use the one the developer names, then the identity in the current
+   branch name, then a search by subject, using native tools or `relic search --kind work`.
+3. Read its intent, its current frontier, and the links that matter before acting.
 
-### 1. Verify the orchestrator is connected
+A small task needs no work item. Using Ranni creates no obligation.
 
-The orchestrator exposes four MCP tools: `dispatch_task`, `list_active_workers`,
-`get_pending_results`, `cancel_task`.
+## Leave Traces
 
-If these tools are not available:
-- Tell the user the ranni MCP server is not running.
-- Instruct them to start it: `bun run node_modules/ranni-mcp/src/index.ts`
-- Then instruct them to check `.mcp.json` has the ranni entry (run `bun node_modules/ranni-mcp/src/init.ts` if not)
-- Stop here until it is running.
+Every executor follows the same contract, including you:
 
-### 2. Read the current queue state
+- the branch name contains the identity, for example `work/WORK-042-push`;
+- every commit carries the trailer `Work: WORK-042`;
+- the pull request title or body mentions the identity.
 
-Always call both tools at startup:
+To parallelize, use what this harness offers: subagents, sessions, worktrees. Hand each
+executor the identity and these rules, and ask it to rewrite the frontier when it stops.
+Never spawn, schedule, or poll on Ranni's behalf.
 
-```
-get_pending_results(drain: false)   ← see what's waiting without consuming it
-list_active_workers()               ← see what's running and what's queued
-```
+## Keep the Frontier Current
 
-Report the state to the user before asking what they want to do.
+Rewrite the current frontier, never append to it. Rewrite it when:
 
----
+- the plan changes;
+- you learn something the next agent needs;
+- you are blocked;
+- you are about to end a turn that changed something.
 
-## The manager loop
+Say where the work stopped, what was learned, what changed, and the next step. Write it
+for an agent reading it cold. Git keeps the history.
 
-Every turn follows this exact order — no exceptions:
+You may, without asking:
 
-```
-1. Call get_pending_results()       ← ALWAYS first, every turn
-2. Read every result carefully
-3. Decide what to do next
-4. Either: reply to the user, dispatch more tasks, ask a clarifying question, or escalate
-```
+- rewrite the frontier;
+- create sub-items that refine the parent's intent;
+- set or clear `waiting`.
 
-**Never dispatch before reading results.** Workers may have produced output that changes
-what should be dispatched next. A result that says "needs_help" or "error" may block
-or invalidate tasks you were about to queue.
+Ask the developer before you change or cut intent, drop scope, or close a work item.
 
----
+## Escalate Without Blocking
 
-## Proactive result monitoring
+When a decision belongs to the developer:
 
-After dispatching tasks, **do not go silent**. Workers finish asynchronously and the
-user should not have to ask "what happened" — you surface results proactively.
+1. set the frontmatter key `waiting` to a one-line question;
+2. explain the options in the frontier and recommend one;
+3. keep working on unblocked parts, and stop mutating the blocked boundary.
 
-After every dispatch (or any turn where workers are still running), use `ScheduleWakeup`
-to re-enter the manager loop automatically:
+If the developer is present, also ask in the conversation. Remove `waiting` once the
+decision is made.
 
-```
-ScheduleWakeup({
-  delaySeconds: 90,
-  prompt: "<original skill invocation prompt>",
-  reason: "polling worker results — N tasks still running"
-})
-```
+## Route References Deliberately
 
-Each wakeup follows the normal manager loop: call `get_pending_results()`, report
-completions/errors to the user, dispatch follow-ups if needed, then reschedule
-if work remains. Stop scheduling once `list_active_workers()` shows an empty queue
-and there are no unacknowledged results.
+Read a reference only when its trigger fires.
 
-**Interval guidance:**
-- Workers typically finish in 2–5 min — use 90s while actively running
-- Once the queue is empty, stop rescheduling entirely
+**Creating a work item or a sub-item** → [work-items.md](references/work-items.md)
+**The work landed, or the developer asks to close it** → [closing.md](references/closing.md)
 
----
+## Boundaries
 
-## Breaking down work
-
-When the user describes something to build or fix, your job is to:
-
-1. **Understand the full scope** — ask one clarifying question if genuinely ambiguous,
-   then proceed. Do not ask multiple questions upfront.
-
-2. **Identify the affected sub-projects** — use the available dirs from `.agents.yaml`.
-
-3. **Split into atomic tasks** — each task must:
-   - Touch only one concern or one sub-project
-   - Be completable without knowledge of what other workers are doing
-   - Be fully self-contained: include file paths, what to change, and why
-
-4. **Express real dependencies** — use `depends_on` only when task B literally cannot
-   run until task A's files are on disk. Do not use it just because tasks are "related."
-
-5. **Dispatch immediately** — push tasks as soon as you know them. Do not wait to
-   describe your whole plan before dispatching.
-
----
-
-## Writing good task descriptions
-
-Workers have no memory of this conversation. Every task must stand alone.
-
-**Good task:**
-```
-Add a POST /api/notifications endpoint to the Django backend.
-- Create apps/notifications/views.py with a NotificationView class.
-- Register the URL in backend/api/urls.py as /api/notifications/.
-- The endpoint accepts { user_id: string, message: string, type: "push"|"email" }.
-- Return 201 on success, 400 on validation error.
-- Use the existing authentication middleware from apps/core/middleware.py.
-```
-
-**Bad task:**
-```
-Add the notifications endpoint we discussed.
-```
-
-Workers cannot see "we discussed." Repeat every relevant detail in the task field.
-
----
-
-## Dispatching
-
-```
-dispatch_task({
-  tasks: [
-    {
-      id: "unique-kebab-case-id",
-      dir: "backend",
-      task: "Full self-contained task description...",
-      context: "Optional: file paths, background, constraints",
-      links: ["https://notion.so/..."],
-      relevant_files: ["src/screens/Foo.tsx"],
-      depends_on: ["other-task-id"],
-      priority: 0  // optional: higher runs first among eligible pending tasks
-    }
-  ]
-})
-```
-
-IDs should be descriptive: `notif-api-endpoint`, `notif-mobile-service`.
-Avoid generic IDs like `task-1`, `task-2`.
-
-Always populate `links` and `relevant_files` when you have them — workers start
-investigation here instead of searching from scratch.
-
----
-
-## Handling results
-
-| Status | What to do |
-|--------|-----------|
-| `done` | Note what changed. Dispatch follow-up work if needed. |
-| `done_with_conflict` | A resolution task was auto-injected — check `list_active_workers()`. |
-| `needs_help` | Surface to user: **"Worker [id] needs your input: [message]"** |
-| `error` | Decide: retry, dispatch a corrected version, or inform the user. Never silently skip. |
-
----
-
-## Checking the board
-
-```
-list_active_workers()
-get_pending_results(drain: false)
-```
-
-Report format:
-```
-Running (N/max_workers):
-  [notif-api] backend — started 2 min ago
-
-Queued (N waiting):
-  [push-ui] web — waiting on: notif-api
-
-Recent results:
-  ✓ [notif-mobile] done — Created NotificationService.ts
-  ✗ [notif-web] error — "Could not find usePushToken hook"
-```
-
----
-
-## Session end
-
-When the user is done:
-
-1. Call `list_active_workers()` — if workers are still running, warn the user.
-   Running workers continue even after this session ends.
-
-2. Remind the user the queue persists in `.agent-queue.json` and is safe to resume.
+- Do not write a status field, queue, lock, or counter. State comes from Git and the Git
+  host at read time.
+- Do not treat harness-specific session state as evidence.
+- Do not dispatch follow-up work automatically or require a polling loop.
+- Do not add a Ranni configuration file or reserve topology inside Relic.
