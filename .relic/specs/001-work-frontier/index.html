@@ -84,10 +84,53 @@
     </p>
     <relic-callout type="governance">
       Relic leaves persistence to the developer. Ranni's governance for the
-      <code>work</code> kind deliberately lets agents rewrite the current frontier
-      without asking, because that is the burden being delegated. Changing intent, or
-      closing, splitting, or removing a work item, still needs developer approval.
+      <code>work</code> kind deliberately delegates part of that burden. Agents may,
+      without asking:
+      <ul>
+        <li>rewrite the current frontier;</li>
+        <li>create sub-items that refine their parent's intent;</li>
+        <li>set or clear the <code>waiting</code> key.</li>
+      </ul>
+      Changing or cutting intent, and closing a work item, still need developer
+      approval.
     </relic-callout>
+  </section>
+
+  <section>
+    <h2>Waiting on the developer</h2>
+    <p>
+      A decision that only the developer can make is written into the work item, not
+      only raised in chat:
+    </p>
+    <ul>
+      <li>the top-level frontmatter key <code>waiting</code> is set, and its value is a one-line question;</li>
+      <li>the current frontier explains the decision and the options;</li>
+      <li>the agent keeps working on unblocked parts, and stops mutating the blocked boundary.</li>
+    </ul>
+    <p>
+      Escalation becomes data the developer reads when they choose. Relic finds it
+      with <code>relic search --kind work --meta waiting</code>, and
+      <code>ranni status</code> shows it. The agent that resolves it, or the developer,
+      removes the key. Relic treats the key as opaque; the meaning is Ranni's
+      convention.
+    </p>
+  </section>
+
+  <section>
+    <h2>Closing and harvest</h2>
+    <p>
+      Delivered work is no longer the frontier, so a closed work item leaves the corpus.
+      When evidence shows the work landed, the skill proposes closing it:
+    </p>
+    <ol>
+      <li>harvest: propose moving durable knowledge discovered during the work into Relic, such as an ADR, a business rule, or a spec update, through the Relic skill and its developer-approved persistence;</li>
+      <li>after the developer approves closing, delete the work item file and repair links that pointed at it;</li>
+      <li>Git keeps the history; there is no closed status, archive folder, or tombstone.</li>
+    </ol>
+    <p>
+      Harvest is how Ranni feeds Relic: knowledge produced while working outlives the
+      work item instead of dying with it.
+    </p>
   </section>
 
   <section>
@@ -124,6 +167,29 @@
       metadata field such as <code>status</code> for its own reasons; Ranni reads it as
       opaque input and never writes it.
     </p>
+  </section>
+
+  <section>
+    <h2>The skill</h2>
+    <p>
+      The skill has no modes or phases. It acts at these moments, and defers to the
+      Relic skill for knowledge work such as roasts and persistence instead of
+      duplicating it.
+    </p>
+    <dl>
+      <dt>Entering work</dt>
+      <dd>It finds the item the developer names, the identity in the current branch name, or a Relic search by subject. It reads intent, frontier, and links before acting. A small task needs no work item; using Ranni creates no obligation.</dd>
+      <dt>Creating a work item</dt>
+      <dd>Only when the work will likely outlive one session, pass between agents, or land in separate parts. It writes intent from the developer's words, accepts rough intent, and asks only blocking questions.</dd>
+      <dt>Keeping the frontier</dt>
+      <dd>It rewrites the frontier when the plan changes, when it learns something the next agent needs, when it is blocked, and before ending a turn that changed something.</dd>
+      <dt>Parallelizing</dt>
+      <dd>It recommends whatever the current harness offers, such as subagents, sessions, or worktrees, and hands each executor the work identity. It spawns nothing itself.</dd>
+      <dt>Escalating</dt>
+      <dd>It sets <code>waiting</code> and continues elsewhere instead of blocking the whole session.</dd>
+      <dt>Closing</dt>
+      <dd>It proposes harvest and closing when evidence shows the work landed.</dd>
+    </dl>
   </section>
 
   <section>
