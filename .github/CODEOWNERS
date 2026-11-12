@@ -1,0 +1,14 @@
+# All files — default owner
+* @filfp
+
+# CI/CD workflows and the shared pieces they pin — require explicit owner review
+.github/ @filfp
+
+# Release script, version file and the distributed skill
+scripts/publish.ts @filfp
+package.json @filfp
+templates/ranni/ @filfp
+
+# Install guard and dependency policy
+.claude/ @filfp
+bunfig.toml @filfp
