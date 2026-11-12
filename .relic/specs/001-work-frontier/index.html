@@ -243,8 +243,16 @@
           <td>Deterministic, read-only board derived at read time from Relic search plus Git and Git host evidence, with <code>[id...]</code> to narrow and <code>--json</code> for agents. No watch mode.</td>
         </tr>
         <tr>
-          <td><code>ranni install</code></td>
-          <td>Install or refresh the Ranni skill next to the Relic skill.</td>
+          <td><code>ranni init</code></td>
+          <td>
+            Idempotent setup, mirroring <code>relic init</code>:
+            <ul>
+              <li>it requires an existing <code>relic.yaml</code> and never creates one;</li>
+              <li>it declares the <code>work</code> record kind only if none is declared, and leaves the rest of the file untouched;</li>
+              <li>it installs or refreshes the Ranni skill next to every installed Relic skill, so engine discovery stays Relic's.</li>
+            </ul>
+            Running it again only refreshes the skill.
+          </td>
         </tr>
       </tbody>
     </table>
