@@ -18,10 +18,10 @@ Spec: [`.relic/specs/001-work-frontier/index.html`](.relic/specs/001-work-fronti
 ## Install
 
 ```bash
-bun add -g ranni
+bun add -g ranni-cli
 ```
 
-The 0.1 MCP orchestrator was published as `ranni-mcp`; Ranni 2 is published as `ranni`.
+The 0.1 MCP orchestrator was published as `ranni-mcp`; Ranni 2 is published as `ranni-cli`, and the command is `ranni`.
 
 ## `ranni init`
 

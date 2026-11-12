@@ -1,6 +1,6 @@
 {
-  "name": "ranni",
-  "version": "0.2.1",
+  "name": "ranni-cli",
+  "version": "0.2.2",
   "description": "Ranni 2: the work frontier agents leave behind, derived from Relic, Git and the Git host",
   "repository": {
     "type": "git",
@@ -13,7 +13,7 @@
     "templates"
   ],
   "bin": {
-    "ranni": "./bin/ranni.js"
+    "ranni": "bin/ranni.js"
   },
   "scripts": {
     "ranni": "bun run src/index.ts",
