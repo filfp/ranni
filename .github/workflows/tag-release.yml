@@ -16,7 +16,7 @@ jobs:
       contents: write
       actions: write
     # Shared with Relic, pinned to a commit of filfp/relic.
-    uses: filfp/relic/.github/workflows/release-tag.yml@648eae1e5891a9f3221be18feeff341c6fa99531 # relic main, 2026-11-12
+    uses: filfp/relic/.github/workflows/release-tag.yml@f0fc60912a1fc9a565684513b6824fcbab10b455 # relic main, 2026-11-12
     with:
       check: test "$(node -p "require('./package.json').version")" = "$VERSION"
       targets: npm:publish-npm.yml

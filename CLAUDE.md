@@ -35,7 +35,8 @@ relic verify        # this repo is a Relic project
 the supply-chain gate, the Bun setup and the release-tag workflow shared from `filfp/relic`,
 pinned to a commit: bump that SHA in `.github/workflows/` to take a Relic change.
 Release: `bun run release <x.y.z>` opens `release/v<x.y.z>`; merging it tags and publishes through
-npm trusted publishing (`publish-npm.yml`, no token).
+npm trusted publishing (`publish-npm.yml`, no token), creates the GitHub release and publishes a
+copy to GitHub Packages as `@filfp/ranni-cli`.
 
 ## Rules
 

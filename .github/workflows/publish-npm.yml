@@ -11,10 +11,11 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      packages: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: filfp/relic/.github/actions/setup-bun@648eae1e5891a9f3221be18feeff341c6fa99531 # relic main, 2026-11-12
+      - uses: filfp/relic/.github/actions/setup-bun@f0fc60912a1fc9a565684513b6824fcbab10b455 # relic main, 2026-11-12
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -22,5 +23,15 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       # Trusted publishing (OIDC): no token. npm checks this workflow's filename.
+      # A rerun skips a version npm already has, so the GitHub Packages step can still run.
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        run: |
+          if npm view "ranni-cli@$(node -p "require('./package.json').version")" version >/dev/null 2>&1; then
+            echo "Already on npm."
+          else
+            npm publish --provenance --access public
+          fi
+
+      # GitHub Packages only takes scoped names: @filfp/ranni-cli.
+      - name: Publish to GitHub Packages
+        uses: filfp/relic/.github/actions/github-packages@f0fc60912a1fc9a565684513b6824fcbab10b455 # relic main, 2026-11-12

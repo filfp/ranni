@@ -12,9 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       # Shared with Relic, pinned to a commit of filfp/relic.
-      - uses: filfp/relic/.github/actions/setup-bun@648eae1e5891a9f3221be18feeff341c6fa99531 # relic main, 2026-11-12
+      - uses: filfp/relic/.github/actions/setup-bun@f0fc60912a1fc9a565684513b6824fcbab10b455 # relic main, 2026-11-12
       - name: Supply chain (pins, release floor, audit)
-        uses: filfp/relic/.github/actions/supply-chain@648eae1e5891a9f3221be18feeff341c6fa99531 # relic main, 2026-11-12
+        uses: filfp/relic/.github/actions/supply-chain@f0fc60912a1fc9a565684513b6824fcbab10b455 # relic main, 2026-11-12
       - run: bun run typecheck
       - run: bun test
       - name: Install hook tests
