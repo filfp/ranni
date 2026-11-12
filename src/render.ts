@@ -39,6 +39,9 @@ export function detailLines(it: ItemStatus, defaultBranch?: string): string[] {
     for (const p of merged) lines.push(`PR #${p.number} merged`)
     const mb = it.branches.filter(b => b.merged)
     if (merged.length === 0 && mb.length) lines.push(`branch ${mb[0].name} merged into ${defaultBranch ?? 'the default branch'}`)
+    else if (merged.length === 0 && it.mergedTrailerCommits) {
+      lines.push(`${plural(it.mergedTrailerCommits, 'trailer commit')} on ${defaultBranch ?? 'the default branch'}`)
+    }
   }
   if (it.label === 'in-review' || it.label === 'waiting') {
     for (const p of open) lines.push(prLine(p))

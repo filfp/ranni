@@ -135,6 +135,14 @@ describe('gh missing fallback', () => {
     expect(renderHuman(m)).toContain('branch work/WORK-02-x merged into main')
   })
 
+  test('a trailer commit on the default branch is merged evidence after its branch is gone', async () => {
+    const run = fakeRunner(baseReplies([item(3)], null, { 'git rev-list': ok('c1\n') }))
+    const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
+    expect(m.items[0].label).toBe('ready-to-close')
+    expect(m.items[0].mergedTrailerCommits).toBe(1)
+    expect(renderHuman(m)).toContain('1 trailer commit on main')
+  })
+
   test('an empty branch on the default tip is not merged evidence', async () => {
     const run = fakeRunner(
       baseReplies([item(2)], null, {

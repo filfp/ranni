@@ -19,6 +19,8 @@ export interface RepoGit {
   /** Default branch short name as origin/HEAD reports it (or main/master as a last resort). */
   defaultBranch?: string
   defaultTip?: string
+  /** Work: trailer commits on the default branch. Set only in Git-only mode. */
+  defaultCommits?: Set<string>
 }
 
 const NO_GIT: RepoGit = { available: false, refs: [], trailers: [] }
@@ -115,21 +117,32 @@ function findDefaultRef(refs: RefInfo[], name: string): RefInfo | undefined {
   return refs.find(r => r.full === `refs/remotes/origin/${name}`) ?? refs.find(r => r.full === `refs/heads/${name}`)
 }
 
+export interface MergedRead {
+  /** Full names of refs fully merged into the default branch. */
+  refs: Set<string>
+  /** Commits on the default branch whose message has a Work: line. */
+  commits: Set<string>
+}
+
 /**
- * Git-only mode: which refs are fully merged into the default branch. One extra read,
- * made only when the Git host is unavailable.
+ * Git-only mode: which refs and Work: trailer commits are on the default branch. Two
+ * extra reads, made only when the Git host is unavailable. The commit read keeps a work
+ * item ready to close after its merged branch is deleted.
  */
-export async function readMerged(run: Runner, cwd: string, repo: RepoGit): Promise<Set<string>> {
-  if (!repo.defaultBranch) return new Set()
+export async function readMerged(run: Runner, cwd: string, repo: RepoGit): Promise<MergedRead> {
+  const none: MergedRead = { refs: new Set(), commits: new Set() }
+  if (!repo.defaultBranch) return none
   const ref = findDefaultRef(repo.refs, repo.defaultBranch)
-  if (!ref) return new Set()
-  const res = await run(
-    'git',
-    ['for-each-ref', `--merged=${ref.full}`, '--format=%(refname)', 'refs/heads', 'refs/remotes'],
-    { cwd },
-  )
-  if (res.code !== 0) return new Set()
-  return new Set(res.stdout.split('\n').filter(Boolean))
+  if (!ref) return none
+  const [refsRes, commitsRes] = await Promise.all([
+    run('git', ['for-each-ref', `--merged=${ref.full}`, '--format=%(refname)', 'refs/heads', 'refs/remotes'], { cwd }),
+    run('git', ['rev-list', '--regexp-ignore-case', '--extended-regexp', '--grep=^[[:space:]]*Work:', ref.full], { cwd }),
+  ])
+  const lines = (s: string) => new Set(s.split('\n').map(l => l.trim()).filter(Boolean))
+  return {
+    refs: refsRes.code === 0 ? lines(refsRes.stdout) : new Set(),
+    commits: commitsRes.code === 0 ? lines(commitsRes.stdout) : new Set(),
+  }
 }
 
 /**
@@ -141,7 +154,7 @@ export async function readMerged(run: Runner, cwd: string, repo: RepoGit): Promi
 export function gitEvidenceFor(repo: RepoGit, id: string): GitEvidence {
   const commits: CommitEvidence[] = repo.trailers
     .filter(t => mentions(t.value, id))
-    .map(t => ({ sha: t.sha, date: t.date }))
+    .map(t => ({ sha: t.sha, date: t.date, ...(repo.defaultCommits ? { merged: repo.defaultCommits.has(t.sha) } : {}) }))
   const branches: BranchEvidence[] = repo.refs
     .filter(r => mentions(r.bare, id))
     .map(r => ({
@@ -154,6 +167,7 @@ export function gitEvidenceFor(repo: RepoGit, id: string): GitEvidence {
   return { branches, commits }
 }
 
-export function markMerged(repo: RepoGit, merged: Set<string>): void {
-  for (const r of repo.refs) r.inDefault = merged.has(r.full)
+export function markMerged(repo: RepoGit, merged: MergedRead): void {
+  for (const r of repo.refs) r.inDefault = merged.refs.has(r.full)
+  repo.defaultCommits = merged.commits
 }

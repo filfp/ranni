@@ -56,6 +56,11 @@ describe('real git repository', () => {
   commit(repo, 'feat: lands\n\nWork: WORK-043', '2026-02-10T00:00:00Z')
   git(repo, 'checkout', '-q', 'main')
   git(repo, 'merge', '-q', '--no-ff', '-m', 'merge 043', 'WORK-043-lands')
+  git(repo, 'checkout', '-q', '-b', 'work/WORK-044-gone')
+  commit(repo, 'feat: gone\n\nWork: WORK-044', '2026-02-12T00:00:00Z')
+  git(repo, 'checkout', '-q', 'main')
+  git(repo, 'merge', '-q', '--no-ff', '-m', 'merge 044', 'work/WORK-044-gone')
+  git(repo, 'branch', '-q', '-D', 'work/WORK-044-gone')
   git(repo, 'branch', 'work/WORK-04-other')
 
   test('reads branches, trailers, dates and the default branch in two git reads', async () => {
@@ -82,6 +87,18 @@ describe('real git repository', () => {
     expect(gitEvidenceFor(rg, 'WORK-042').branches[0].merged).toBe(false)
     // a fresh branch on the default tip with no trailer commits is not merged evidence
     expect(gitEvidenceFor(rg, 'WORK-04').branches[0].merged).toBe(false)
+  })
+
+  test('marks trailer commits on the default branch, so a deleted merged branch still counts', async () => {
+    const rg = await readRepoGit(run, repo)
+    markMerged(rg, await readMerged(run, repo, rg))
+    const e44 = gitEvidenceFor(rg, 'WORK-044')
+    expect(e44.branches).toHaveLength(0)
+    expect(e44.commits.map(c => c.merged)).toEqual([true])
+    expect(gitEvidenceFor(rg, 'WORK-043').commits.map(c => c.merged)).toEqual([true])
+    expect(gitEvidenceFor(rg, 'WORK-042').commits.map(c => c.merged)).toEqual([false, false])
+    // without the Git-only read, commits carry no merged flag
+    expect(gitEvidenceFor(await readRepoGit(run, repo), 'WORK-044').commits[0].merged).toBeUndefined()
   })
 
   test('a directory that is not a repository is reported, not thrown', async () => {

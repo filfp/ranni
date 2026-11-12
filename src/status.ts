@@ -32,6 +32,8 @@ export interface ItemStatus {
   ageSeconds?: number
   branches: { name: string; remote: boolean; date: string; merged?: boolean }[]
   trailerCommits: number
+  /** Trailer commits on the default branch. Only present in Git-only mode. */
+  mergedTrailerCommits?: number
   pullRequests: PullRequestEvidence[]
   links: { id: string; title: string; label: Label }[]
 }
@@ -111,7 +113,7 @@ export async function buildStatus(deps: Deps, opts: StatusOptions): Promise<Stat
     const ev: Evidence = {
       git: gitEv,
       pullRequests: prs,
-      mergedByGit: !host.available && gitEv.branches.some(b => b.merged === true),
+      mergedByGit: !host.available && (gitEv.branches.some(b => b.merged === true) || gitEv.commits.some(c => c.merged === true)),
     }
     const d = derive(it, ev, defaultBranch)
     derived.set(it, { ev, label: d.label, last: d.lastActivity })
@@ -143,6 +145,9 @@ export async function buildStatus(deps: Deps, opts: StatusOptions): Promise<Stat
         ...(last ? { lastActivity: last, ageSeconds: Math.max(0, Math.round((now.getTime() - Date.parse(last)) / 1000)) } : {}),
         branches: ev.git.branches.map(b => ({ name: b.name, remote: b.remote, date: b.date, ...(b.merged !== undefined ? { merged: b.merged } : {}) })),
         trailerCommits: ev.git.commits.length,
+        ...(ev.git.commits.some(c => c.merged !== undefined)
+          ? { mergedTrailerCommits: ev.git.commits.filter(c => c.merged).length }
+          : {}),
         pullRequests: ev.pullRequests,
         links,
       }

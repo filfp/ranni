@@ -180,7 +180,9 @@
     </table>
     <p>
       Without the Git host CLI or network, status shows Git evidence only and says what
-      is missing. In a federation, each member is read against its own repository.
+      is missing. There, a branch or a <code>Work:</code> trailer commit on the default
+      branch stands in for a merged pull request, so deleting a merged branch keeps the
+      item ready to close. In a federation, each member is read against its own repository.
       "Merged" is measured against the repository's default branch, as the Git host or
       <code>origin/HEAD</code> reports it, with no configuration.
     </p>

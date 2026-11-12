@@ -44,6 +44,8 @@ export interface BranchEvidence {
 export interface CommitEvidence {
   sha: string
   date: string
+  /** On the default branch. Only computed in Git-only mode. */
+  merged?: boolean
 }
 
 export interface GitEvidence {
