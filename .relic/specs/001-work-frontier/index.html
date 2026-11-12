@@ -1,0 +1,290 @@
+<relic-body id="001-work-frontier" data-status="proposed">
+  <header>
+    <relic-chip>Ranni 2</relic-chip>
+    <h1>The work frontier agents leave behind</h1>
+    <p>
+      Ranni keeps the living state of in-flight work, meaning what is changing, why,
+      where it stopped, and what was learned, as ordinary Relic records. Any agent,
+      harness, or human can pick it up. Ranni never runs agents. Execution belongs to
+      whatever harness the developer uses today, and that harness keeps evolving
+      without Ranni's permission.
+    </p>
+  </header>
+
+  <relic-callout type="principle">
+    <strong>Product center:</strong> Relic indexes what the system should be; Ranni
+    indexes the frontier of the work changing it. The goal is to take agent management
+    off the developer's mind without freezing callers into a fixed runtime, protocol, or
+    lifecycle.
+  </relic-callout>
+
+  <section>
+    <h2>Why Ranni 0.1 died</h2>
+    <p>
+      Ranni 0.1 was an MCP orchestrator. It failed for the same reason Relic 1.x did,
+      which was rigidity in a world where agents change every month.
+    </p>
+    <ul>
+      <li>It owned execution: it spawned a fixed worker command, so every new harness capability (subagents, background sessions, worktrees, workflows, cloud) stayed outside it.</li>
+      <li>It demanded a self-contained task upfront, so the first human mistake propagated through the whole chain.</li>
+      <li>Workers had to end their output with a custom result block that the orchestrator parsed.</li>
+      <li>It kept a stored status machine (<code>pending</code>, <code>running</code>, <code>awaiting_review</code>, <code>done_with_conflict</code>…) that drifted from reality.</li>
+      <li>The machine made judgment calls: it auto-dispatched correction and conflict workers, and the skill required a polling loop.</li>
+      <li>The queue was gitignored runtime state, so what agents learned was lost.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Relationship with Relic</h2>
+    <p>
+      Ranni requires Relic. The dependency points one way: Ranni consumes Relic, and
+      Relic never knows Ranni exists. Projects that use only Relic see no change.
+    </p>
+    <ul>
+      <li>Work items are an ordinary record kind declared by the host project in its <code>relic.yaml</code>, for example <code>work: .relic/records/work</code> with identities such as <code>WORK-001</code>. Relic reserves nothing for Ranni and Ranni adds no configuration file.</li>
+      <li>Ranni reads the kind named <code>work</code> by default; an option names another declared kind.</li>
+      <li>Selection goes through Relic's structured search (<code>relic search --kind work --meta … --json</code>), which Relic accepts on its own merits in its <code>003-structured-search</code> specification. Ranni declares which versions of that JSON format it supports. Relic filters combine only with AND; when Ranni needs another combination, it runs several searches and merges the results itself.</li>
+      <li>Relic's search, viewer, verify, links, backlinks, and federation work on work items unchanged. In a federated project, work spread across member repositories composes for free.</li>
+      <li>There is no plugin contract in Relic. Ranni extends Relic by consuming its public read model, not by being loaded into it.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>A work item is a living document</h2>
+    <p>
+      A work item is Markdown with only <code>id</code> required. The Ranni skill writes
+      it with conventional sections, but neither Relic nor Ranni enforces them:
+    </p>
+    <table>
+      <thead>
+        <tr><th>Part</th><th>Owner</th><th>Content</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Intent</td>
+          <td>Developer; agents propose changes</td>
+          <td>The outcome wanted and why. It may start rough; it is refined as knowledge appears.</td>
+        </tr>
+        <tr>
+          <td>Current frontier</td>
+          <td>Whoever works on it</td>
+          <td>Where it stopped, what was discovered, what changed in the plan, and the next step. It is rewritten, not appended; Git keeps the history.</td>
+        </tr>
+        <tr>
+          <td>Relationships</td>
+          <td>Anyone</td>
+          <td>Ordinary relative links to Relic specs and records it touches, and to work it depends on. Links become graph edges; frontmatter values stay opaque and are only filterable.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Refinement happens at the edge: the agent doing the work holds the freshest
+      context, so splitting, rewriting, or narrowing a work item is the normal path, not
+      a failure. Nothing has to be specified completely before work starts.
+    </p>
+    <relic-callout type="governance">
+      Relic leaves persistence to the developer. Ranni's governance for the
+      <code>work</code> kind deliberately delegates part of that burden. Agents may,
+      without asking:
+      <ul>
+        <li>rewrite the current frontier;</li>
+        <li>create sub-items that refine their parent's intent;</li>
+        <li>set or clear the <code>waiting</code> key.</li>
+      </ul>
+      Changing or cutting intent, and closing a work item, still need developer
+      approval.
+    </relic-callout>
+  </section>
+
+  <section>
+    <h2>Waiting on the developer</h2>
+    <p>
+      A decision that only the developer can make is written into the work item, not
+      only raised in chat:
+    </p>
+    <ul>
+      <li>the top-level frontmatter key <code>waiting</code> is set, and its value is a one-line question;</li>
+      <li>the current frontier explains the decision and the options;</li>
+      <li>the agent keeps working on unblocked parts, and stops mutating the blocked boundary.</li>
+    </ul>
+    <p>
+      Escalation becomes data the developer reads when they choose. Relic finds it
+      with <code>relic search --kind work --meta waiting</code>, and
+      <code>ranni status</code> shows it. The agent that resolves it, or the developer,
+      removes the key. Relic treats the key as opaque; the meaning is Ranni's
+      convention.
+    </p>
+  </section>
+
+  <section>
+    <h2>Closing and harvest</h2>
+    <p>
+      Delivered work is no longer the frontier, so a closed work item leaves the corpus.
+      When evidence shows the work landed, the skill proposes closing it:
+    </p>
+    <ol>
+      <li>harvest: propose moving durable knowledge discovered during the work into Relic, such as an ADR, a business rule, or a spec update, through the Relic skill and its developer-approved persistence;</li>
+      <li>after the developer approves closing, delete the work item file and repair links that pointed at it;</li>
+      <li>Git keeps the history; there is no closed status, archive folder, or tombstone.</li>
+    </ol>
+    <p>
+      Harvest is how Ranni feeds Relic: knowledge produced while working outlives the
+      work item instead of dying with it.
+    </p>
+  </section>
+
+  <section>
+    <h2>The only contract with executors</h2>
+    <p>
+      An executor references the work identity where it already leaves traces, and
+      keeps the frontier current:
+    </p>
+    <ul>
+      <li>the branch name contains the identity, for example <code>work/WORK-042-push</code>;</li>
+      <li>commits carry a trailer such as <code>Work: WORK-042</code>;</li>
+      <li>the pull request title or head branch mentions the identity, or its body carries a line such as <code>Work: WORK-042</code>; a plain mention in the body, such as "depends on WORK-041", is not evidence;</li>
+      <li>the current frontier section is updated at natural stopping points.</li>
+    </ul>
+    <p>
+      Any agent of any version, or a human, can satisfy this. There is no output block
+      to parse and no tool the executor must call.
+    </p>
+  </section>
+
+  <section>
+    <h2>State is derived, never stored</h2>
+    <p>
+      Ranni keeps no status field and no queue. State comes from evidence at read time:
+    </p>
+    <table>
+      <thead>
+        <tr><th>Source</th><th>One read per repository</th><th>Evidence</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Relic</td>
+          <td><code>relic search --kind work --json</code></td>
+          <td>identity, path, <code>waiting</code>, links and backlinks</td>
+        </tr>
+        <tr>
+          <td>Git</td>
+          <td>local and remote branch refs, and one log reading <code>Work:</code> trailers</td>
+          <td>branches and commits per identity, last activity</td>
+        </tr>
+        <tr>
+          <td>Git host</td>
+          <td>one pull request listing, matched locally by identity</td>
+          <td>state, review decision, unresolved threads, checks</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Without the Git host CLI or network, status shows Git evidence only and says what
+      is missing. There, a branch or a <code>Work:</code> trailer commit on the default
+      branch stands in for a merged pull request, so deleting a merged branch keeps the
+      item ready to close. In a federation, each member is read against its own repository.
+      "Merged" is measured against the repository's default branch, as the Git host or
+      <code>origin/HEAD</code> reports it, with no configuration.
+    </p>
+    <p>Each work item gets the first label that applies:</p>
+    <ol>
+      <li><strong>Waiting on you:</strong> <code>waiting</code> is set; the question is shown.</li>
+      <li><strong>Ready to close:</strong> a pull request mentioning it is merged and the work item still exists.</li>
+      <li><strong>In review:</strong> an open pull request, with requested changes, unresolved threads, failing checks, or approval.</li>
+      <li><strong>In flight:</strong> branches or commits, no pull request yet.</li>
+      <li><strong>Not started:</strong> no traces.</li>
+    </ol>
+    <ul>
+      <li><strong>No staleness threshold.</strong> Status shows the age of the last activity and sorts by it. Deciding that work stalled belongs to whoever reads it, the developer or the skill.</li>
+      <li><strong>No computed blocking.</strong> Links are untyped, so status shows the label of every work item an item links to, for example <code>→ WORK-041 in review</code>. Deciding that work is blocked belongs to the reader. Dependencies stay ordinary links; there is no <code>depends</code> key.</li>
+    </ul>
+    <p>
+      Evidence comes only from Git and the Git host, never from a specific agent
+      harness, so the view keeps working when the harness changes. A project may keep a
+      metadata field such as <code>status</code> for its own reasons; Ranni reads it as
+      opaque input and never writes it.
+    </p>
+  </section>
+
+  <section>
+    <h2>The skill</h2>
+    <p>
+      The skill has no modes or phases. It acts at these moments, and defers to the
+      Relic skill for knowledge work such as roasts and persistence instead of
+      duplicating it.
+    </p>
+    <dl>
+      <dt>Entering work</dt>
+      <dd>It finds the item the developer names, the identity in the current branch name, or a Relic search by subject. It reads intent, frontier, and links before acting. A small task needs no work item; using Ranni creates no obligation.</dd>
+      <dt>Creating a work item</dt>
+      <dd>Only when the work will likely outlive one session, pass between agents, or land in separate parts. It writes intent from the developer's words, accepts rough intent, and asks only blocking questions.</dd>
+      <dt>Keeping the frontier</dt>
+      <dd>It rewrites the frontier when the plan changes, when it learns something the next agent needs, when it is blocked, and before ending a turn that changed something.</dd>
+      <dt>Parallelizing</dt>
+      <dd>It recommends whatever the current harness offers, such as subagents, sessions, or worktrees, and hands each executor the work identity. It spawns nothing itself.</dd>
+      <dt>Escalating</dt>
+      <dd>It sets <code>waiting</code> and continues elsewhere instead of blocking the whole session.</dd>
+      <dt>Closing</dt>
+      <dd>It proposes harvest and closing when evidence shows the work landed.</dd>
+    </dl>
+  </section>
+
+  <section>
+    <h2>Product surface</h2>
+    <table>
+      <thead>
+        <tr><th>Surface</th><th>Responsibility</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Skill</td>
+          <td>Judgment: shape rough intent into work items, propose splits, choose what is next, keep the frontier current, escalate decisions to the developer, and point at Relic knowledge the work affects.</td>
+        </tr>
+        <tr>
+          <td><code>ranni status</code></td>
+          <td>Deterministic, read-only board derived at read time from Relic search plus Git and Git host evidence, with <code>[id...]</code> to narrow and <code>--json</code> for agents. No watch mode.</td>
+        </tr>
+        <tr>
+          <td><code>ranni init</code></td>
+          <td>
+            Idempotent setup, mirroring <code>relic init</code>:
+            <ul>
+              <li>it requires an existing <code>relic.yaml</code> and never creates one;</li>
+              <li>it declares the <code>work</code> record kind only if none is declared, and leaves the rest of the file untouched;</li>
+              <li>it installs or refreshes the Ranni skill next to every installed Relic skill, so engine discovery stays Relic's.</li>
+            </ul>
+            Running it again only refreshes the skill.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <relic-flow direction="right">
+      Developer intent -> work item with rough intent -> any harness executes ->
+      traces reference the id and the frontier is rewritten -> ranni status derives the board ->
+      developer decides
+    </relic-flow>
+  </section>
+
+  <section>
+    <h2>Regression alarms</h2>
+    <p>Stop and confront a proposal that brings back any of these:</p>
+    <ul>
+      <li>spawning, scheduling, or configuring agents or workers;</li>
+      <li>a required output protocol, MCP tool, or callback that executors must speak;</li>
+      <li>a stored status, queue, lock, or lifecycle state machine;</li>
+      <li>automatic dispatch of follow-up work, or polling loops required by the skill;</li>
+      <li>a configuration file of Ranni's own, or a reserved topology inside Relic;</li>
+      <li>reading harness-specific session state as evidence;</li>
+      <li>parsing the Relic corpus itself instead of consuming Relic's read model;</li>
+      <li>compatibility layers whose purpose is to keep Ranni 0.1 behavior.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Open questions</h2>
+    <ul>
+      <li>Whether derived state ever needs to appear inside the Relic viewer. It is deferred until its absence actually hurts; Ranni shows its own view meanwhile.</li>
+      <li>How the work frontier relates to CodeLeap Hub tasks: the Hub task owns the what and why for the client and team, and the work item owns the how and the frontier for agents.</li>
+    </ul>
+  </section>
+</relic-body>
