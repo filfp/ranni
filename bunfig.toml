@@ -1,0 +1,6 @@
+[install]
+# Every dependency is pinned exactly, and nothing published in the last 7 days installs:
+# a fresh release is the window in which a compromised package does its damage.
+# The shared supply-chain action from filfp/relic enforces both in CI.
+exact = true
+minimumReleaseAge = 604800

@@ -5,11 +5,11 @@
     "": {
       "name": "@codeleap/orchestrator",
       "dependencies": {
-        "yaml": "^2.4.0",
+        "yaml": "2.9.0",
       },
       "devDependencies": {
-        "@types/bun": "latest",
-        "typescript": "^5.4.0",
+        "@types/bun": "1.3.14",
+        "typescript": "5.9.3",
       },
     },
   },
