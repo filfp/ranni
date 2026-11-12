@@ -1,6 +1,6 @@
 {
   "name": "ranni",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Ranni 2: the work frontier agents leave behind, derived from Relic, Git and the Git host",
   "repository": {
     "type": "git",
