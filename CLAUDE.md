@@ -36,4 +36,4 @@ relic verify        # this repo is a Relic project
 - Never spawn, schedule or configure agents; never read harness-specific session state.
 - No staleness thresholds and no computed blocking.
 - `ranni init` never creates `relic.yaml` and never touches it beyond declaring the work kind.
-- The package is still named `ranni-mcp`; renaming and version bumps are the developer's call.
+- The npm package is `ranni` (0.1.x shipped the old MCP orchestrator as `ranni-mcp`). Version bumps are the developer's call.

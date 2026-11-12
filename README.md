@@ -9,11 +9,19 @@ Spec: [`.relic/specs/001-work-frontier/index.html`](.relic/specs/001-work-fronti
 
 ## Requirements
 
-- Relic with structured search (`relic search --kind <kind> --json`,
+- Relic 2.3.0 or later, with structured search (`relic search --kind <kind> --json`,
   `formatVersion` 1). Ranni consumes Relic's read model and never parses the corpus.
 - `git`. `gh` is optional: without it (or without auth or network) `status` shows Git evidence
   only and says what is missing.
 - Bun.
+
+## Install
+
+```bash
+bun add -g ranni
+```
+
+The 0.1 MCP orchestrator was published as `ranni-mcp`; Ranni 2 is published as `ranni`.
 
 ## `ranni init`
 
