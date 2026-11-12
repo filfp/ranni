@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { addWorkKind, chooseWorkRoot, runInit, templateDir } from '../src/init'
@@ -132,5 +132,42 @@ describe('runInit', () => {
     expect(existsSync(join(d, '.cursor/skills/ranni'))).toBe(false)
     expect(existsSync(join(d, '.github/skills/ranni'))).toBe(false)
     expect(o.out.match(/skills\/ranni: installed/g)).toHaveLength(3)
+  })
+})
+
+describe('runInit stays inside the project', () => {
+  test('refuses a work root that relic.yaml places outside, and changes nothing', () => {
+    const yaml = 'topology:\n  specs: .relic/specs\n  records:\n    adr: ../elsewhere/decisions\n'
+    const d = project(yaml)
+    const { o, io: x } = io()
+    expect(runInit(d, x)).toBe(1)
+    expect(o.err).toContain('outside the project root')
+    expect(readFileSync(join(d, 'relic.yaml'), 'utf8')).toBe(yaml)
+    expect(existsSync(join(d, '..', 'elsewhere'))).toBe(false)
+    expect(existsSync(join(d, '.claude', 'skills', 'ranni'))).toBe(false)
+  })
+
+  test('refuses an engine directory that is a symbolic link out of the project', () => {
+    const outside = tmp()
+    mkdirSync(join(outside, 'skills', 'relic'), { recursive: true })
+    writeFileSync(join(outside, 'skills', 'relic', 'SKILL.md'), '# relic')
+    mkdirSync(join(outside, 'skills', 'ranni'), { recursive: true })
+    writeFileSync(join(outside, 'skills', 'ranni', 'keep.txt'), 'not yours')
+    const d = project(RELIC, [])
+    symlinkSync(outside, join(d, '.claude'))
+    const { o, io: x } = io()
+    expect(runInit(d, x)).toBe(1)
+    expect(o.err).toContain('.claude/skills/ranni resolves to')
+    expect(readFileSync(join(outside, 'skills', 'ranni', 'keep.txt'), 'utf8')).toBe('not yours')
+    expect(readFileSync(join(d, 'relic.yaml'), 'utf8')).toBe(RELIC)
+  })
+
+  test('refuses a skill directory that is itself a symbolic link', () => {
+    const d = project()
+    const elsewhere = tmp()
+    symlinkSync(elsewhere, join(d, '.claude', 'skills', 'ranni'))
+    const { o, io: x } = io()
+    expect(runInit(d, x)).toBe(1)
+    expect(o.err).toMatch(/outside the project root|is a symbolic link/)
   })
 })
