@@ -1,7 +1,7 @@
 {
   "name": "ranni-mcp",
   "version": "0.1.4",
-  "description": "Provider-agnostic multi-agent orchestration MCP server",
+  "description": "Ranni 2: the work frontier agents leave behind, derived from Relic, Git and the Git host",
   "repository": {
     "type": "git",
     "url": "https://github.com/filfp/ranni"
@@ -13,19 +13,16 @@
     "templates"
   ],
   "bin": {
-    "ranni-mcp": "./bin/ranni-mcp.js"
+    "ranni": "./bin/ranni.js"
   },
   "scripts": {
-    "start": "bun run src/index.ts",
-    "init": "bun run src/init.ts",
-    "build": "bun build --compile src/index.ts --outfile dist/ranni-mcp",
+    "ranni": "bun run src/index.ts",
+    "test": "bun test",
     "typecheck": "tsc --noEmit",
     "release": "bun run scripts/publish.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "yaml": "^2.4.0",
-    "zod": "^3.22.0"
+    "yaml": "^2.4.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
