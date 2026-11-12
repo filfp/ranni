@@ -156,10 +156,45 @@
     <p>
       Ranni keeps no status field and no queue. State comes from evidence at read time:
     </p>
+    <table>
+      <thead>
+        <tr><th>Source</th><th>One read per repository</th><th>Evidence</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Relic</td>
+          <td><code>relic search --kind work --json</code></td>
+          <td>identity, path, <code>waiting</code>, links and backlinks</td>
+        </tr>
+        <tr>
+          <td>Git</td>
+          <td>local and remote branch refs, and one log reading <code>Work:</code> trailers</td>
+          <td>branches and commits per identity, last activity</td>
+        </tr>
+        <tr>
+          <td>Git host</td>
+          <td>one pull request listing, matched locally by identity</td>
+          <td>state, review decision, unresolved threads, checks</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Without the Git host CLI or network, status shows Git evidence only and says what
+      is missing. In a federation, each member is read against its own repository.
+      "Merged" is measured against the repository's default branch, as the Git host or
+      <code>origin/HEAD</code> reports it, with no configuration.
+    </p>
+    <p>Each work item gets the first label that applies:</p>
+    <ol>
+      <li><strong>Waiting on you:</strong> <code>waiting</code> is set; the question is shown.</li>
+      <li><strong>Ready to close:</strong> a pull request mentioning it is merged and the work item still exists.</li>
+      <li><strong>In review:</strong> an open pull request, with requested changes, unresolved threads, failing checks, or approval.</li>
+      <li><strong>In flight:</strong> branches or commits, no pull request yet.</li>
+      <li><strong>Not started:</strong> no traces.</li>
+    </ol>
     <ul>
-      <li>branches and commits referencing the identity, and how recently they moved;</li>
-      <li>pull requests referencing it: open, merged, closed, and unresolved review threads;</li>
-      <li>readiness: every linked dependency whose evidence shows merged work.</li>
+      <li><strong>No staleness threshold.</strong> Status shows the age of the last activity and sorts by it. Deciding that work stalled belongs to whoever reads it, the developer or the skill.</li>
+      <li><strong>No computed blocking.</strong> Links are untyped, so status shows the label of every work item an item links to, for example <code>→ WORK-041 in review</code>. Deciding that work is blocked belongs to the reader. Dependencies stay ordinary links; there is no <code>depends</code> key.</li>
     </ul>
     <p>
       Evidence comes only from Git and the Git host, never from a specific agent
@@ -205,7 +240,7 @@
         </tr>
         <tr>
           <td><code>ranni status</code></td>
-          <td>Deterministic, read-only board derived from Relic search plus Git and Git host evidence: in flight, stalled, waiting for review, ready, blocked.</td>
+          <td>Deterministic, read-only board derived at read time from Relic search plus Git and Git host evidence, with <code>[id...]</code> to narrow and <code>--json</code> for agents. No watch mode.</td>
         </tr>
         <tr>
           <td><code>ranni install</code></td>
@@ -239,7 +274,6 @@
     <h2>Open questions</h2>
     <ul>
       <li>Whether derived state ever needs to appear inside the Relic viewer. It is deferred until its absence actually hurts; Ranni shows its own view meanwhile.</li>
-      <li>The threshold for "stalled" and whether a project can tune it without a configuration file.</li>
       <li>How the work frontier relates to CodeLeap Hub tasks: the Hub task owns the what and why for the client and team, and the work item owns the how and the frontier for agents.</li>
     </ul>
   </section>
