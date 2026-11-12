@@ -52,7 +52,7 @@ export async function main(argv: string[], cwd: string, io: Io): Promise<number>
           else ids.push(a)
         }
         const model = await buildStatus(
-          { run, readFile: p => { try { return readFileSync(p, 'utf8') } catch { return undefined } }, now: new Date(), cwd },
+          { run, now: new Date(), cwd },
           { kind, ids },
         )
         io.out(json ? JSON.stringify(model, null, 2) + '\n' : renderHuman(model))

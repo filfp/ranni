@@ -6,7 +6,6 @@ import { fail, fakeRunner, ok, searchJson } from './fakes'
 
 const NOW = new Date('2026-06-10T12:00:00Z')
 const item = (n: number, extra: object = {}) => ({ id: `WORK-0${n}`, path: `w/WORK-0${n}.md`, label: `Item ${n}`, ...extra })
-const FM = (waiting?: string) => `---\nid: x\n${waiting ? `waiting: ${waiting}\n` : ''}---\n`
 
 const refsOut = [
   'refs/heads/main\tm1\t2026-06-01T00:00:00+00:00\t',
@@ -44,18 +43,17 @@ function baseReplies(items: object[], prs: object[] | null, extra: Record<string
   }
 }
 
-const deps = (run: ReturnType<typeof fakeRunner>, files: Record<string, string> = {}) => ({
+const deps = (run: ReturnType<typeof fakeRunner>) => ({
   run,
   now: NOW,
   cwd: '/proj',
   projectRoot: '/proj',
-  readFile: (p: string) => files[p],
 })
 
 describe('buildStatus with gh', () => {
   test('derives each label and the links between items', async () => {
     const items = [
-      item(1, { links: ['w/WORK-02.md'] }),
+      item(1, { links: ['w/WORK-02.md'], metadata: { id: 'WORK-01', waiting: 'Which DB?' } }),
       item(2),
       item(3),
       item(4),
@@ -70,7 +68,7 @@ describe('buildStatus with gh', () => {
         'gh api graphql': ok(JSON.stringify({ data: { repository: { p7: { reviewThreads: { nodes: [{ isResolved: false }, { isResolved: true }, { isResolved: false }] } } } } })),
       }),
     )
-    const m = await buildStatus(deps(run, { '/proj/w/WORK-01.md': FM('Which DB?') }), { kind: 'work', ids: [] })
+    const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
     const by = Object.fromEntries(m.items.map(i => [i.id, i]))
     expect(by['WORK-01'].label).toBe('waiting')
     expect(by['WORK-01'].waiting).toBe('Which DB?')

@@ -3,15 +3,13 @@ import { RanniError } from './errors'
 import { gitEvidenceFor, markMerged, readMerged, readRepoGit } from './git'
 import { prsFor, readHost, readThreads } from './host'
 import { findProjectRoot } from './project'
-import { fillWaiting, searchWork } from './relic'
-import type { ReadFile } from './relic'
+import { searchWork } from './relic'
 import type { Runner } from './runner'
 import { LABEL_ORDER } from './types'
 import type { Evidence, Label, PullRequestEvidence, WorkItem } from './types'
 
 export interface Deps {
   run: Runner
-  readFile: ReadFile
   now: Date
   cwd: string
   /** Defaults to the nearest relic.yaml ancestor of cwd. Tests may set it. */
@@ -57,12 +55,6 @@ export interface StatusModel {
 
 const sameProject = (a?: string[], b?: string[]) => (a ?? []).join('/') === (b ?? []).join('/')
 
-/** The filesystem root for evidence. Only the selected project is derivable from Relic's output. */
-export function rootFor(root: string) {
-  return (project: string[] | undefined): string | undefined =>
-    !project || project.length <= 1 ? root : undefined
-}
-
 export async function buildStatus(deps: Deps, opts: StatusOptions): Promise<StatusModel> {
   const { run, cwd, now } = deps
   const root = deps.projectRoot ?? findProjectRoot(cwd)
@@ -78,15 +70,10 @@ export async function buildStatus(deps: Deps, opts: StatusOptions): Promise<Stat
     }
   }
 
-  const rf = rootFor(root)
-  const waitingRead = fillWaiting(all, deps.readFile, rf)
-
   if (federated) {
     notes.push(
-      'Federation: Relic reports member project addresses but not their filesystem roots, so Git evidence comes from the root repository only. Work items of members may show less activity than they have, and their waiting key is not read.',
+      'Federation: Relic reports member project addresses but not their filesystem roots, so Git evidence comes from the root repository only. Work items of members may show less activity than they have.',
     )
-  } else if (waitingRead.unreadable > 0) {
-    notes.push(`The waiting key of ${waitingRead.unreadable} work item(s) could not be read.`)
   }
 
   // Git: one for-each-ref and one log for the whole repository.

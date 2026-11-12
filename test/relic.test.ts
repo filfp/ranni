@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { RanniError } from '../src/errors'
-import { fillWaiting, parseSearch, readWaiting, searchWork } from '../src/relic'
-import type { WorkItem } from '../src/types'
+import { parseSearch, searchWork } from '../src/relic'
 import { fail, fakeRunner, ok, searchJson } from './fakes'
 
 describe('parseSearch', () => {
@@ -48,27 +47,13 @@ describe('searchWork', () => {
   })
 })
 
-describe('waiting from frontmatter', () => {
-  test('reads only the waiting key', () => {
-    expect(readWaiting('---\nid: W-1\nwaiting: Use Postgres or SQLite?\n---\n# T\nwaiting: no\n')).toBe('Use Postgres or SQLite?')
-    expect(readWaiting('---\nid: W-1\n---\n# T\n')).toBeUndefined()
-    expect(readWaiting('# no frontmatter')).toBeUndefined()
-  })
+describe('waiting from search metadata', () => {
   test('a bare key still escalates', () => {
-    expect(readWaiting('---\nid: W-1\nwaiting:\n---\n')).toBe('')
+    const { items } = parseSearch(searchJson([{ id: 'W-1', path: 'a.md', metadata: { id: 'W-1', waiting: null } }]))
+    expect(items[0].waiting).toBe('')
   })
-  test('fillWaiting reads each result file once and skips unreachable projects', () => {
-    const items: WorkItem[] = [
-      { id: 'W-1', path: 'a.md', title: 'a', links: [] },
-      { id: 'W-2', path: 'b.md', title: 'b', links: [], project: ['root', 'api'] },
-      { id: 'W-3', path: 'c.md', title: 'c', links: [], waiting: 'kept' },
-    ]
-    const reads: string[] = []
-    const r = fillWaiting(items, p => (reads.push(p), '---\nid: x\nwaiting: Q?\n---\n'), pr => (!pr || pr.length <= 1 ? '/root' : undefined))
-    expect(reads).toEqual(['/root/a.md'])
-    expect(r).toEqual({ read: 1, unreadable: 1 })
-    expect(items[0].waiting).toBe('Q?')
-    expect(items[1].waiting).toBeUndefined()
-    expect(items[2].waiting).toBe('kept')
+  test('results without metadata need a newer relic', () => {
+    const json = JSON.stringify({ formatVersion: 1, results: [{ type: 'document', id: 'W-1', path: 'a.md' }] })
+    expect(() => parseSearch(json)).toThrow(/no metadata/)
   })
 })

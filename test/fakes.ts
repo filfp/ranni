@@ -43,7 +43,7 @@ export function searchJson(
       links: (i.links ?? []).map(t => ({ sourcePath: i.path, href: t, text: t, status: 'canonical', targetPath: t })),
       backlinks: [],
       ...(i.project ? { project: i.project } : {}),
-      ...(i.metadata ? { metadata: i.metadata } : {}),
+      metadata: i.metadata ?? { id: i.id },
     })),
   })
 }

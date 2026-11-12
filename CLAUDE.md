@@ -30,8 +30,8 @@ relic verify        # this repo is a Relic project
 
 ## Rules
 
-- Relic is consumed through `relic search --kind <kind> --json` only. The one file Ranni opens is a
-  work item's frontmatter, to read the `waiting` key when the search result carries no metadata.
+- Relic is consumed through `relic search --kind <kind> --json` only, including each work item's
+  metadata (`waiting`). Ranni never opens corpus files.
 - State is derived at read time. No stored status, queue, lock, cache, config file or env config.
 - Never spawn, schedule or configure agents; never read harness-specific session state.
 - No staleness thresholds and no computed blocking.

@@ -1,4 +1,3 @@
-import { parse as parseYaml } from 'yaml'
 import { RanniError } from './errors'
 import type { Runner } from './runner'
 import type { LinkRef, WorkItem } from './types'
@@ -6,11 +5,7 @@ import type { LinkRef, WorkItem } from './types'
 export const SUPPORTED_FORMAT_VERSION = 1
 
 const MIN_RELIC =
-  'Ranni needs a relic with structured search: `relic search --kind <kind> --json` reporting formatVersion 1.'
-
-export interface ReadFile {
-  (path: string): string | undefined
-}
+  'Ranni needs a relic with structured search: `relic search --kind <kind> --json` reporting formatVersion 1 with document metadata.'
 
 /** Validates and converts the JSON of `relic search --json`. Pure. */
 export function parseSearch(stdout: string): { items: WorkItem[]; federated: boolean } {
@@ -38,13 +33,16 @@ export function parseSearch(stdout: string): { items: WorkItem[]; federated: boo
     if (typeof r.id !== 'string' || typeof r.path !== 'string') continue
     const project = Array.isArray(r.project) ? (r.project as unknown[]).map(String) : undefined
     if (project && project.length > 1) federated = true
-    const meta = r.metadata as Record<string, unknown> | undefined
+    if (r.metadata === null || typeof r.metadata !== 'object' || Array.isArray(r.metadata)) {
+      throw new RanniError(`relic search results carry no metadata. ${MIN_RELIC}`)
+    }
+    const meta = r.metadata as Record<string, unknown>
     items.push({
       id: r.id,
       path: r.path,
       title: typeof r.label === 'string' ? r.label : r.id,
       project,
-      waiting: meta && 'waiting' in meta ? waitingText(meta.waiting) : undefined,
+      waiting: 'waiting' in meta ? waitingText(meta.waiting) : undefined,
       links: parseLinks(r.links),
     })
   }
@@ -71,24 +69,6 @@ export function waitingText(v: unknown): string {
   return String(v).replace(/\s+/g, ' ').trim()
 }
 
-/**
- * Reads only the `waiting` key of a work item's frontmatter. Returns undefined when the
- * key is absent. This is the sole place Ranni opens a corpus file.
- */
-export function readWaiting(text: string): string | undefined {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text)
-  if (!m) return undefined
-  let fm: unknown
-  try {
-    fm = parseYaml(m[1])
-  } catch {
-    return undefined
-  }
-  if (fm === null || typeof fm !== 'object' || Array.isArray(fm)) return undefined
-  if (!('waiting' in fm)) return undefined
-  return waitingText((fm as Record<string, unknown>).waiting)
-}
-
 export async function searchWork(
   run: Runner,
   cwd: string,
@@ -106,30 +86,4 @@ export async function searchWork(
     throw new RanniError(`relic search failed (exit ${res.code}): ${err || 'no output'}`)
   }
   return parseSearch(res.stdout)
-}
-
-/** Fills `waiting` for items whose search result carried no metadata. */
-export function fillWaiting(
-  items: WorkItem[],
-  readFile: ReadFile,
-  rootFor: (project: string[] | undefined) => string | undefined,
-): { read: number; unreadable: number } {
-  let read = 0
-  let unreadable = 0
-  for (const it of items) {
-    if (it.waiting !== undefined) continue
-    const root = rootFor(it.project)
-    if (root === undefined) {
-      unreadable++
-      continue
-    }
-    const text = readFile(`${root.replace(/\/$/, '')}/${it.path}`)
-    if (text === undefined) {
-      unreadable++
-      continue
-    }
-    read++
-    it.waiting = readWaiting(text)
-  }
-  return { read, unreadable }
 }
