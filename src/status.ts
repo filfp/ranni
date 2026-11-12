@@ -2,7 +2,7 @@ import { derive } from './derive'
 import { RanniError } from './errors'
 import { gitEvidenceFor, markMerged, readMerged, readRepoGit } from './git'
 import { prsFor, readHost, readThreads } from './host'
-import { findProjectRoot } from './project'
+import { declaresRecordKind, findProjectRoot } from './project'
 import { searchWork } from './relic'
 import type { Runner } from './runner'
 import { LABEL_ORDER } from './types'
@@ -70,6 +70,12 @@ export async function buildStatus(deps: Deps, opts: StatusOptions): Promise<Stat
     if (!all.some(i => i.id.toUpperCase() === w)) {
       throw new RanniError(`No work item ${w} of kind "${opts.kind}"${all.length ? '' : ' (the kind has no items; has `ranni init` run?)'}.`)
     }
+  }
+
+  if (all.length === 0 && !federated && declaresRecordKind(root, opts.kind) === false) {
+    notes.push(
+      `relic.yaml declares no "${opts.kind}" record kind. Run \`ranni init\` to declare the work kind, or pass --kind with a declared one.`,
+    )
   }
 
   if (federated) {

@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { renderHuman, formatAge } from '../src/render'
 import { buildStatus } from '../src/status'
 import { classifyGhFailure, parsePr } from '../src/host'
@@ -177,5 +180,29 @@ describe('helpers', () => {
     expect(formatAge(3 * 3600)).toBe('3h')
     expect(formatAge(3 * 86400)).toBe('3d')
     expect(formatAge(30 * 86400)).toBe('4w')
+  })
+})
+
+describe('undeclared work kind', () => {
+  const withYaml = async (yaml: string) => {
+    const dir = mkdtempSync(join(tmpdir(), 'ranni-kind-'))
+    try {
+      writeFileSync(join(dir, 'relic.yaml'), yaml)
+      const run = fakeRunner(baseReplies([], []))
+      return await buildStatus({ ...deps(run), projectRoot: dir }, { kind: 'work', ids: [] })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  test('says the kind is not declared and how to fix it', async () => {
+    const m = await withYaml('topology:\n  specs: .relic/specs\n  records:\n    adr: .relic/records/decisions\n')
+    expect(m.notes.join(' ')).toContain('relic.yaml declares no "work" record kind')
+    expect(renderHuman(m)).toContain('Run `ranni init`')
+  })
+
+  test('stays quiet when the kind is declared but has no items', async () => {
+    const m = await withYaml('topology:\n  specs: .relic/specs\n  records:\n    work: .relic/records/work\n')
+    expect(m.notes.join(' ')).not.toContain('declares no')
   })
 })
