@@ -1,7 +1,7 @@
 # Ranni
 
 The work frontier agents leave behind. Ranni keeps the living state of in-flight work as
-ordinary [Relic](https://github.com/filfp/relic) records, so any agent, harness or human can
+ordinary Relic records, so any agent, harness or human can
 pick it up. It never runs agents, keeps no queue and stores no status: `ranni status`
 derives the board from Relic, Git and the Git host every time you ask.
 
@@ -9,7 +9,7 @@ Spec: [`.relic/specs/001-work-frontier/index.html`](.relic/specs/001-work-fronti
 
 ## Requirements
 
-- [Relic](https://github.com/filfp/relic) with structured search (`relic search --kind <kind> --json`,
+- Relic with structured search (`relic search --kind <kind> --json`,
   `formatVersion` 1). Ranni consumes Relic's read model and never parses the corpus.
 - `git`. `gh` is optional: without it (or without auth or network) `status` shows Git evidence
   only and says what is missing.
