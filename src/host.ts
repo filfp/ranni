@@ -24,11 +24,11 @@ const NONE: HostRead = { available: false, pullRequests: [], truncated: false }
 export function classifyGhFailure(stderr: string, missing: boolean): string {
   if (missing) return 'gh is not installed'
   const s = stderr.trim()
-  if (/auth|log in|login|token|credentials|401|403/i.test(s)) return 'gh is not authenticated (run `gh auth login`)'
-  if (/resolve host|network|timed? ?out|dial tcp|connection|offline/i.test(s)) return 'no network to reach the Git host'
   if (/no git remotes|none of the git remotes|not a git repository|could not resolve to a repository/i.test(s)) {
     return 'this repository has no GitHub remote'
   }
+  if (/auth|log in|login|token|credentials|401|403/i.test(s)) return 'gh is not authenticated (run `gh auth login`)'
+  if (/resolve host|network|timed? ?out|dial tcp|connection|offline/i.test(s)) return 'no network to reach the Git host'
   return `gh failed: ${s.split('\n')[0] || 'no output'}`
 }
 

@@ -160,6 +160,7 @@ describe('helpers', () => {
     expect(classifyGhFailure('To get started with GitHub CLI, please run: gh auth login', false)).toContain('not authenticated')
     expect(classifyGhFailure('error connecting to api.github.com: dial tcp: lookup', false)).toContain('no network')
     expect(classifyGhFailure('no git remotes found', false)).toContain('no GitHub remote')
+    expect(classifyGhFailure('none of the git remotes configured point to a known GitHub host. use `gh auth login`', false)).toContain('no GitHub remote')
   })
   test('parses pull requests', () => {
     const p = parsePr({ number: 3, state: 'merged', baseRefName: 'main', isDraft: true, reviewDecision: 'APPROVED' })
