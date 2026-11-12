@@ -69,3 +69,8 @@ bun test
 bun run typecheck
 bun run ranni -- status
 ```
+
+## Contributing, security and license
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately as described in
+[SECURITY.md](SECURITY.md). Ranni is released under the [MIT License](LICENSE).
