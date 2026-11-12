@@ -10,6 +10,19 @@ export function mentions(text: string, id: string): boolean {
   return new RegExp(`(?<![A-Za-z0-9])${esc}(?![A-Za-z0-9])`, 'i').test(text)
 }
 
+/**
+ * Whether `body` declares the identity on a `Work:` line, the same shape as the commit
+ * trailer. Several identities may share one line, separated by commas or spaces. Plain
+ * mentions elsewhere in the body ("depends on WORK-041") do not count.
+ */
+export function declaresWork(body: string, id: string): boolean {
+  if (!body || !id) return false
+  for (const match of body.matchAll(/^[ \t]*Work:[ \t]*(.+)$/gim)) {
+    if (match[1]!.split(/[\s,]+/).some(token => token.toLowerCase() === id.toLowerCase())) return true
+  }
+  return false
+}
+
 export function newest(dates: (string | undefined)[]): string | undefined {
   let best: string | undefined
   let bestT = -Infinity

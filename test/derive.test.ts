@@ -95,3 +95,25 @@ describe('countFailingChecks', () => {
     expect(countFailingChecks(undefined)).toBe(0)
   })
 })
+
+describe('declaresWork and prsFor', () => {
+  test('only a Work: line in the body counts', async () => {
+    const { declaresWork } = await import('../src/derive')
+    expect(declaresWork('Summary\n\nWork: WORK-042', 'WORK-042')).toBe(true)
+    expect(declaresWork('work: work-042, WORK-043', 'WORK-043')).toBe(true)
+    expect(declaresWork('Depends on WORK-041', 'WORK-041')).toBe(false)
+    expect(declaresWork('Work: WORK-0421', 'WORK-042')).toBe(false)
+    expect(declaresWork('Homework: WORK-042', 'WORK-042')).toBe(false)
+  })
+
+  test('a plain body mention does not tie a PR to a work item', async () => {
+    const { prsFor } = await import('../src/host')
+    const prs = [
+      { title: 'feat: api', body: 'Work: WORK-042\nDepends on WORK-041', head: 'feature/api' },
+      { title: 'WORK-041 ui', body: '', head: 'x' },
+      { title: 'misc', body: '', head: 'work/WORK-041-ui' },
+    ]
+    expect(prsFor(prs, 'WORK-042').map(p => p.title)).toEqual(['feat: api'])
+    expect(prsFor(prs, 'WORK-041').map(p => p.title)).toEqual(['WORK-041 ui', 'misc'])
+  })
+})

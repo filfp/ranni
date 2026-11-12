@@ -50,7 +50,7 @@ Any agent or human leaves traces the board can read:
 
 - the branch name contains the identity, for example `work/WORK-042-push`;
 - commits carry a trailer, `Work: WORK-042`;
-- the pull request title or body mentions the identity;
+- the pull request title or head branch mentions the identity, or its body carries `Work: WORK-042`;
 - the current frontier section of the work item is rewritten at natural stopping points.
 
 ## Development

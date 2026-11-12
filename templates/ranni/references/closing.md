@@ -13,7 +13,7 @@ to close one.
 
 Check the evidence, not the frontier's claims:
 
-- pull requests that mention the identity are merged;
+- pull requests tied to the identity (title, branch, or a `Work:` line) are merged;
 - branches carrying it are merged or gone;
 - sub-items are closed, or are explicitly moving on without their parent;
 - the intent is met.

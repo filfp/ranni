@@ -29,7 +29,8 @@ Every executor follows the same contract, including you:
 
 - the branch name contains the identity, for example `work/WORK-042-push`;
 - every commit carries the trailer `Work: WORK-042`;
-- the pull request title or body mentions the identity.
+- the pull request title mentions the identity, or its body carries `Work: WORK-042`.
+  Mentioning another item in the body ("depends on WORK-041") does not tie the PR to it.
 
 To parallelize, use what this harness offers: subagents, sessions, worktrees. Hand each
 executor the identity and these rules, and ask it to rewrite the frontier when it stops.
