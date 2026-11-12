@@ -28,6 +28,15 @@ relic verify        # this repo is a Relic project
 - `src/runner.ts`: the only place subprocesses start; tests inject a fake (`test/fakes.ts`)
 - `templates/ranni/`: the skill this CLI installs. It is the product's text; do not edit it casually.
 
+## Supply chain
+
+`bunfig.toml` pins exact versions and refuses releases younger than 7 days. Add a dependency with
+`bun add --exact <pkg>@<x.y.z>`; `.claude/hooks/guard-install.sh` refuses anything else. CI runs
+the supply-chain gate, the Bun setup and the release-tag workflow shared from `filfp/relic`,
+pinned to a commit: bump that SHA in `.github/workflows/` to take a Relic change.
+Release: `bun run release <x.y.z>` opens `release/v<x.y.z>`; merging it tags and publishes through
+npm trusted publishing (`publish-npm.yml`, no token).
+
 ## Rules
 
 - Relic is consumed through `relic search --kind <kind> --json` only, including each work item's

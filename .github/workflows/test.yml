@@ -1,0 +1,21 @@
+name: Test
+
+on: pull_request
+
+permissions: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # Shared with Relic, pinned to a commit of filfp/relic.
+      - uses: filfp/relic/.github/actions/setup-bun@648eae1e5891a9f3221be18feeff341c6fa99531 # relic main, 2026-11-12
+      - name: Supply chain (pins, release floor, audit)
+        uses: filfp/relic/.github/actions/supply-chain@648eae1e5891a9f3221be18feeff341c6fa99531 # relic main, 2026-11-12
+      - run: bun run typecheck
+      - run: bun test
+      - name: Install hook tests
+        run: bun test ./.claude/hooks/guard-install.test.ts

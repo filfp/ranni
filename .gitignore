@@ -3,4 +3,6 @@ dist/
 .DS_Store
 
 # project-local agent skills installed by relic/ranni
-/.claude/
+/.claude/*
+!/.claude/settings.json
+!/.claude/hooks/
