@@ -1,6 +1,6 @@
 {
   "name": "ranni-cli",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Ranni 2: the work frontier agents leave behind, derived from Relic, Git and the Git host",
   "license": "MIT",
   "homepage": "https://github.com/filfp/ranni#readme",
