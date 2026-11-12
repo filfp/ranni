@@ -1,14 +1,16 @@
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { basename, join, posix, relative } from 'node:path'
+import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isMap, parseDocument } from 'yaml'
 import { RanniError } from './errors'
@@ -143,6 +145,42 @@ export function syncSkill(engineDir: string, template: string): SkillChange {
   return { dir, action: 'updated', detail }
 }
 
+/**
+ * Where `path` really lands: the real path of its nearest existing ancestor, plus the parts
+ * that do not exist yet. Symbolic links on the way are followed, so a linked `.claude` or a
+ * `../` in relic.yaml resolves to wherever it points.
+ */
+export function realTarget(path: string): string {
+  let existing = resolve(path)
+  const rest: string[] = []
+  for (;;) {
+    try {
+      return join(realpathSync(existing), ...rest)
+    } catch {
+      const up = dirname(existing)
+      if (up === existing) return join(existing, ...rest)
+      rest.unshift(basename(existing))
+      existing = up
+    }
+  }
+}
+
+/** Why `path` is not a safe place for `ranni init` to write inside `root`, or undefined. */
+export function escapeReason(root: string, path: string): string | undefined {
+  const realRoot = realpathSync(root)
+  const target = realTarget(path)
+  const rel = relative(realRoot, target)
+  if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    return `${relative(root, path) || '.'} resolves to ${target}, outside the project root ${realRoot}`
+  }
+  try {
+    if (lstatSync(path).isSymbolicLink()) return `${relative(root, path)} is a symbolic link`
+  } catch {
+    // does not exist yet
+  }
+  return undefined
+}
+
 export interface Io {
   out: (s: string) => void
   err: (s: string) => void
@@ -162,6 +200,17 @@ export function runInit(cwd: string, io: Io, template = templateDir()): number {
   }
   const yamlPath = join(root, 'relic.yaml')
   const edit = addWorkKind(readFileSync(yamlPath, 'utf8'))
+  // Every path init writes, replaces or deletes must stay inside the project, symbolic links
+  // included: a linked `.claude` or a `../` record root would otherwise reach elsewhere.
+  const targets = [
+    ...(edit.changed ? [join(root, edit.workRoot)] : []),
+    ...engines.map(e => join(e, 'skills', 'ranni')),
+  ]
+  const escapes = targets.map(t => escapeReason(root, t)).filter((r): r is string => r !== undefined)
+  if (escapes.length > 0) {
+    io.err(`ranni: refusing to write outside the project; nothing was changed:\n${escapes.map(r => `  ${r}\n`).join('')}`)
+    return 1
+  }
 
   const lines: string[] = []
   if (edit.changed) {
