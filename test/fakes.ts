@@ -5,12 +5,12 @@ export interface Call {
   args: string[]
 }
 
-type Reply = Partial<RunResult> | ((args: string[]) => Partial<RunResult>)
+type Reply = Partial<RunResult> | ((args: string[], cwd?: string) => Partial<RunResult>)
 
 /** A runner that answers by `cmd sub-command` prefix, e.g. "gh pr list". Unknown commands are missing. */
 export function fakeRunner(replies: Record<string, Reply>): Runner & { calls: Call[] } {
   const calls: Call[] = []
-  const r = (async (cmd: string, args: string[]) => {
+  const r = (async (cmd: string, args: string[], opts?: { cwd?: string }) => {
     calls.push({ cmd, args })
     const line = [cmd, ...args].join(' ')
     const key = Object.keys(replies)
@@ -18,11 +18,16 @@ export function fakeRunner(replies: Record<string, Reply>): Runner & { calls: Ca
       .find(k => line.startsWith(k))
     if (!key) return { code: 127, stdout: '', stderr: `${cmd}: not found`, missing: true }
     const rep = replies[key]
-    const v = typeof rep === 'function' ? rep(args) : rep
+    const v = typeof rep === 'function' ? rep(args, opts?.cwd) : rep
     return { code: 0, stdout: '', stderr: '', missing: false, ...v }
   }) as Runner & { calls: Call[] }
   r.calls = calls
   return r
+}
+
+/** searchJson output with Relic 2.4.0's top-level projects list. */
+export function withProjects(json: string, projects: { address: string[]; root: string }[]): string {
+  return JSON.stringify({ ...JSON.parse(json), projects })
 }
 
 export const ok = (stdout: string): Partial<RunResult> => ({ stdout })

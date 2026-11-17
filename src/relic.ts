@@ -8,15 +8,28 @@ export const SUPPORTED_FORMAT_VERSION = 1
 const MIN_RELIC =
   'Ranni needs a relic with structured search: `relic search --kind <kind> --json` reporting formatVersion 1 with document metadata.'
 
+export interface ProjectRoot {
+  address: string[]
+  /** Relative to the realpath of the folder holding the selected relic.yaml; `/`-separated, `.` for the root. */
+  root: string
+}
+
+export interface SearchResult {
+  items: WorkItem[]
+  federated: boolean
+  /** Relic 2.4.0+ federated search. Undefined when the field is absent. */
+  projects?: ProjectRoot[]
+}
+
 /** Validates and converts the JSON of `relic search --json`. Pure. */
-export function parseSearch(stdout: string): { items: WorkItem[]; federated: boolean } {
+export function parseSearch(stdout: string): SearchResult {
   let json: unknown
   try {
     json = JSON.parse(stdout)
   } catch {
     throw new RanniError(`relic search did not return JSON. ${MIN_RELIC}`)
   }
-  const root = json as { formatVersion?: unknown; results?: unknown }
+  const root = json as { formatVersion?: unknown; results?: unknown; projects?: unknown }
   if (root === null || typeof root !== 'object' || root.formatVersion === undefined) {
     throw new RanniError(`relic search output has no formatVersion. ${MIN_RELIC}`)
   }
@@ -47,7 +60,23 @@ export function parseSearch(stdout: string): { items: WorkItem[]; federated: boo
       links: parseLinks(r.links),
     })
   }
-  return { items, federated }
+  return { items, federated, projects: parseProjects(root.projects) }
+}
+
+function parseProjects(v: unknown): ProjectRoot[] | undefined {
+  if (v === undefined) return undefined
+  if (!Array.isArray(v)) throw new RanniError('relic search output has a malformed projects list.')
+  return (v as Record<string, unknown>[]).map(p => {
+    const address = p?.address
+    const root = p?.root
+    if (!Array.isArray(address) || typeof root !== 'string' || !root) {
+      throw new RanniError('relic search output has a malformed projects entry.')
+    }
+    if (root.startsWith('/') || /^[A-Za-z]:/.test(root) || root.split('/').includes('..')) {
+      throw new RanniError(`relic search reports an unsafe project root "${root}".`)
+    }
+    return { address: address.map(String), root }
+  })
 }
 
 function parseLinks(v: unknown): LinkRef[] {
@@ -117,7 +146,7 @@ export async function searchWork(
   run: Runner,
   cwd: string,
   kind: string,
-): Promise<{ items: WorkItem[]; federated: boolean }> {
+): Promise<SearchResult> {
   const res = await run('relic', ['search', '--kind', kind, '--json'], { cwd })
   if (res.missing) {
     throw new RanniError(`relic was not found on PATH. Install Relic. ${MIN_RELIC}`)

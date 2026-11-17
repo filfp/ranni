@@ -9,8 +9,11 @@ Spec: [`.relic/specs/001-work-frontier/index.html`](.relic/specs/001-work-fronti
 
 ## Requirements
 
-- Relic 2.3.0 or later, with structured search (`relic search --kind <kind> --json`,
-  `formatVersion` 1). Ranni consumes Relic's read model and never parses the corpus.
+- Relic 2.4.0 or later, with structured search (`relic search --kind <kind> --json`,
+  `formatVersion` 1). Ranni consumes Relic's read model and never parses the corpus. In a
+  federation, Relic 2.4.0's `projects` list gives each member's root, so Git and `gh` evidence is
+  read in each member's own repository (members sharing one repository share one read). Older
+  Relic still works, with root-repository evidence only and a note.
 - `git`. `gh` is optional: without it (or without auth or network) `status` shows Git evidence
   only and says what is missing.
 - Bun.

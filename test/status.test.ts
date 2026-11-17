@@ -6,7 +6,7 @@ import { renderHuman, formatAge } from '../src/render'
 import { buildStatus } from '../src/status'
 import { classifyGhFailure, parsePr } from '../src/host'
 import { parseRanniKind } from '../src/relic'
-import { fail, fakeRunner, ok, searchJson } from './fakes'
+import { fail, fakeRunner, ok, searchJson, withProjects } from './fakes'
 
 const NOW = new Date('2026-06-10T12:00:00Z')
 const item = (n: number, extra: object = {}) => ({ id: `WORK-0${n}`, path: `w/WORK-0${n}.md`, label: `Item ${n}`, ...extra })
@@ -114,6 +114,63 @@ describe('buildStatus with gh', () => {
     const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
     expect(m.notes.join(' ')).toMatch(/Federation.*root repository only/)
     expect(run.calls.filter(c => c.cmd === 'git' && c.args[0] === 'log')).toHaveLength(1)
+  })
+})
+
+describe('federated evidence per member root', () => {
+  const refs = (branch: string) =>
+    `refs/heads/main\tm1\t2026-06-01T00:00:00+00:00\t\nrefs/heads/${branch}\tb\t2026-06-08T12:00:00+00:00\t`
+  const members = () => [
+    { address: ['root'], root: '.' },
+    { address: ['root', 'api'], root: 'api' },
+  ]
+  const items = [item(1), item(2, { project: ['root', 'api'] })]
+  /** Per-folder replies: toplevels maps a folder to its repository top level (absent: not a repository). */
+  function runner(projects: { address: string[]; root: string }[] | undefined, toplevels: Record<string, string>, branches: Record<string, string> = {}) {
+    const search = searchJson(items as any)
+    return fakeRunner({
+      'relic search': ok(projects ? withProjects(search, projects) : search),
+      'git rev-parse --show-toplevel': (_a, cwd) => (cwd && toplevels[cwd] ? ok(toplevels[cwd] + '\n') : fail('fatal: not a git repository', 128)),
+      'git for-each-ref --format': (_a, cwd) => (cwd && branches[cwd] ? ok(refs(branches[cwd])) : fail('fatal: not a git repository', 128)),
+      'git log': ok(''),
+      'gh repo view': ok(JSON.stringify({ nameWithOwner: 'o/r', defaultBranchRef: { name: 'main' } })),
+      'gh pr list': ok('[]'),
+    })
+  }
+  const logCalls = (r: ReturnType<typeof fakeRunner>) => r.calls.filter(c => c.cmd === 'git' && c.args[0] === 'log')
+
+  test('a monorepo with two members is read once', async () => {
+    const run = runner(members(), { '/proj': '/proj', '/proj/api': '/proj' }, { '/proj': 'work/WORK-02-x' })
+    const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
+    expect(logCalls(run)).toHaveLength(1)
+    expect(run.calls.filter(c => c.cmd === 'gh' && c.args[0] === 'pr')).toHaveLength(1)
+    expect(m.items.find(i => i.id === 'WORK-02')!.branches).toHaveLength(1)
+    expect(m.notes.join(' ')).not.toMatch(/Federation/)
+  })
+
+  test('a member with its own nested repository is read in that repository', async () => {
+    const run = runner(members(), { '/proj': '/proj', '/proj/api': '/proj/api' }, { '/proj': 'work/WORK-01-x', '/proj/api': 'work/WORK-02-y' })
+    const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
+    expect(logCalls(run)).toHaveLength(2)
+    const by = Object.fromEntries(m.items.map(i => [i.id, i]))
+    expect(by['WORK-02'].branches.map(b => b.name)).toEqual(['work/WORK-02-y'])
+    expect(by['WORK-01'].branches.map(b => b.name)).toEqual(['work/WORK-01-x'])
+  })
+
+  test('without projects the root repository is used, with the pre-2.4.0 note', async () => {
+    const run = runner(undefined, { '/proj': '/proj' }, { '/proj': 'work/WORK-02-x' })
+    const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
+    expect(run.calls.some(c => c.args[0] === 'rev-parse')).toBe(false)
+    expect(m.notes.join(' ')).toMatch(/Federation.*2\.4\.0/)
+  })
+
+  test('a member outside any repository has no Git evidence and says so', async () => {
+    const run = runner(members(), { '/proj': '/proj' }, { '/proj': 'work/WORK-01-x' })
+    const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
+    const by = Object.fromEntries(m.items.map(i => [i.id, i]))
+    expect(by['WORK-02'].branches).toEqual([])
+    expect(by['WORK-01'].branches).toHaveLength(1)
+    expect(m.notes.join(' ')).toMatch(/\/proj\/api: Git evidence unavailable/)
   })
 })
 

@@ -23,6 +23,16 @@ export interface RepoGit {
   defaultCommits?: Set<string>
 }
 
+/**
+ * The top level of the repository containing `cwd` (a folder without its own repository
+ * resolves to the one above it), or undefined when `cwd` is in no repository.
+ */
+export async function repoToplevel(run: Runner, cwd: string): Promise<string | undefined> {
+  const res = await run('git', ['rev-parse', '--show-toplevel'], { cwd })
+  const top = res.code === 0 ? res.stdout.trim().split('\n')[0] : ''
+  return top || undefined
+}
+
 const NO_GIT: RepoGit = { available: false, refs: [], trailers: [] }
 
 /** One for-each-ref read and one log read. Both are bounded by the repository's own size. */
