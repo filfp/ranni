@@ -33,6 +33,12 @@ const pr = (o: object) => ({
   ...o,
 })
 
+/** What `gh pr list --state all` answers: no draft, review or check fields. */
+const light = (p: any) => {
+  const { isDraft, reviewDecision, statusCheckRollup, ...rest } = p
+  return rest
+}
+
 function baseReplies(items: object[], prs: object[] | null, extra: Record<string, any> = {}) {
   return {
     'relic search': ok(searchJson(items as any)),
@@ -42,7 +48,8 @@ function baseReplies(items: object[], prs: object[] | null, extra: Record<string
     'gh repo view': prs
       ? ok(JSON.stringify({ nameWithOwner: 'o/r', defaultBranchRef: { name: 'main' } }))
       : { code: 127, missing: true },
-    'gh pr list': ok(JSON.stringify(prs ?? [])),
+    'gh pr list --state open': ok(JSON.stringify((prs ?? []).filter((p: any) => p.state === 'OPEN'))),
+    'gh pr list --state all': ok(JSON.stringify((prs ?? []).map(light))),
     ...extra,
   }
 }
@@ -55,6 +62,37 @@ const deps = (run: ReturnType<typeof fakeRunner>) => ({
 })
 
 describe('buildStatus with gh', () => {
+  test('open pull requests keep checks and review; merged ones come from the light listing', async () => {
+    const run = fakeRunner(
+      baseReplies([item(3), item(4)], [
+        pr({ number: 7, title: 'Do WORK-03', isDraft: true, reviewDecision: 'APPROVED', statusCheckRollup: [{ conclusion: 'FAILURE' }, { conclusion: 'SUCCESS' }] }),
+        pr({ number: 8, headRefName: 'work/WORK-04-y', state: 'MERGED', isDraft: true, reviewDecision: 'APPROVED', statusCheckRollup: [{ conclusion: 'FAILURE' }] }),
+      ]),
+    )
+    const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
+    const prs = (id: string) => m.items.find(i => i.id === id)!.pullRequests
+    expect(prs('WORK-03')).toMatchObject([{ number: 7, state: 'OPEN', isDraft: true, reviewDecision: 'APPROVED', failingChecks: 1 }])
+    expect(prs('WORK-04')).toMatchObject([{ number: 8, state: 'MERGED', isDraft: false, reviewDecision: '', failingChecks: 0 }])
+    expect(m.items.find(i => i.id === 'WORK-04')!.label).toBe('ready-to-close')
+    const lists = run.calls.filter(c => c.cmd === 'gh' && c.args[0] === 'pr')
+    expect(lists.map(c => c.args[3]).sort()).toEqual(['all', 'open'])
+    const fields = (state: string) => lists.find(c => c.args[3] === state)!.args.at(-1)!
+    expect(fields('open')).toContain('statusCheckRollup')
+    expect(fields('all')).not.toMatch(/statusCheckRollup|reviewDecision|isDraft/)
+  })
+
+  test('an open pull request missing from the all-states window is still listed, and truncation follows that window', async () => {
+    const many = Array.from({ length: 200 }, (_, i) => pr({ number: 1000 + i, state: 'MERGED' }))
+    const run = fakeRunner(
+      baseReplies([item(3)], many, {
+        'gh pr list --state open': ok(JSON.stringify([pr({ number: 5, title: 'Do WORK-03' })])),
+      }),
+    )
+    const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
+    expect(m.items[0]!.pullRequests.map(p => p.number)).toEqual([5])
+    expect(m.notes.some(n => n.includes('hit its limit'))).toBe(true)
+  })
+
   test('derives each label and the links between items', async () => {
     const items = [
       item(1, { links: ['w/WORK-02.md'], metadata: { id: 'WORK-01', waiting: 'Which DB?' } }),
@@ -85,8 +123,8 @@ describe('buildStatus with gh', () => {
     expect(by['WORK-05'].label).toBe('not-started')
     expect(m.items.map(i => i.label)).toEqual(['waiting', 'ready-to-close', 'in-review', 'in-flight', 'not-started'])
     expect(m.defaultBranch).toBe('main')
-    // one gh PR listing, one graphql, no git-only merged read
-    expect(run.calls.filter(c => c.cmd === 'gh' && c.args[0] === 'pr')).toHaveLength(1)
+    // two gh PR listings (open, all), one graphql, no git-only merged read
+    expect(run.calls.filter(c => c.cmd === 'gh' && c.args[0] === 'pr')).toHaveLength(2)
     expect(run.calls.filter(c => c.cmd === 'gh' && c.args[0] === 'api')).toHaveLength(1)
     expect(run.calls.filter(c => c.cmd === 'git')).toHaveLength(2)
     const text = renderHuman(m)
@@ -143,7 +181,7 @@ describe('federated evidence per member root', () => {
     const run = runner(members(), { '/proj': '/proj', '/proj/api': '/proj' }, { '/proj': 'work/WORK-02-x' })
     const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
     expect(logCalls(run)).toHaveLength(1)
-    expect(run.calls.filter(c => c.cmd === 'gh' && c.args[0] === 'pr')).toHaveLength(1)
+    expect(run.calls.filter(c => c.cmd === 'gh' && c.args[0] === 'pr')).toHaveLength(2)
     expect(m.items.find(i => i.id === 'WORK-02')!.branches).toHaveLength(1)
     expect(m.notes.join(' ')).not.toMatch(/Federation/)
   })
@@ -286,7 +324,8 @@ describe('the kind ranni.md names', () => {
       'git for-each-ref --format': ok(refsOut),
       'git log': ok('c9\x1f2026-06-09T12:00:00+00:00\x1fTICKET-01\x1e'),
       'gh repo view': ok(JSON.stringify({ nameWithOwner: 'o/r', defaultBranchRef: { name: 'main' } })),
-      'gh pr list': ok(JSON.stringify([pr({ number: 9, body: 'Ticket: TICKET-01' })])),
+      'gh pr list --state open': ok(JSON.stringify([pr({ number: 9, body: 'Ticket: TICKET-01' })])),
+      'gh pr list --state all': ok(JSON.stringify([light(pr({ number: 9, body: 'Ticket: TICKET-01' }))])),
       'gh api graphql': ok(JSON.stringify({ data: {} })),
     })
     const m = await buildStatus(deps(run), { ids: [] })

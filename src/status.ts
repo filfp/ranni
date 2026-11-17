@@ -79,20 +79,33 @@ const realpathOr = (p: string) => {
 
 const tag = (ctx: RepoCtx, multi: boolean) => (multi ? `${ctx.dir}: ` : '')
 
-async function loadRepo(
+/** A host read started before the kind was known; the host evidence does not depend on it. */
+interface Prefetch {
+  dir: string
+  host: Promise<HostRead>
+}
+
+/**
+ * Starts the read of the repository, once per repository: the Git and host reads run together.
+ * The map is filled synchronously, in call order, so the order repositories are reported in
+ * never depends on which read finishes first.
+ */
+function loadRepo(
   deps: Deps,
   dir: string,
   kind: string,
-  repos: Map<string, RepoCtx>,
+  repos: Map<string, Promise<RepoCtx>>,
   resolved: boolean,
+  prefetch?: Prefetch,
 ): Promise<RepoCtx> {
   const { run } = deps
   const id = resolved ? realpathOr(dir) : dir
   const known = repos.get(id)
   if (known) return known
-  const git = await readRepoGit(run, dir, trailerKey(kind))
-  const host = await readHost(run, dir)
-  const ctx: RepoCtx = { dir, git, host, defaultBranch: host.defaultBranch ?? git.defaultBranch }
+  const hostRead = prefetch && realpathOr(prefetch.dir) === realpathOr(dir) ? prefetch.host : readHost(run, dir)
+  const ctx = Promise.all([readRepoGit(run, dir, trailerKey(kind)), hostRead]).then(
+    ([git, host]): RepoCtx => ({ dir, git, host, defaultBranch: host.defaultBranch ?? git.defaultBranch }),
+  )
   repos.set(id, ctx)
   return ctx
 }
@@ -103,6 +116,8 @@ export async function buildStatus(deps: Deps, options: StatusOptions): Promise<S
   const { run, cwd, now } = deps
   const root = deps.projectRoot ?? findProjectRoot(cwd)
   if (!root) throw new RanniError('No relic.yaml found above this directory. Run `relic init`, then `ranni init`.')
+  // The host read needs neither the kind nor the work items, so it starts now and overlaps them.
+  const prefetch: Prefetch = { dir: root, host: readHost(run, root) }
   const opts = { ...options, kind: options.kind ?? (await findRanniKind(run, root)) ?? LEGACY_KIND }
 
   const notes: string[] = []
@@ -124,21 +139,19 @@ export async function buildStatus(deps: Deps, options: StatusOptions): Promise<S
   // Evidence is read per Git repository. Without Relic's project roots (or outside a
   // federation) that is the root repository; with them, each member's own folder decides,
   // and members sharing a repository share one read.
-  const repos = new Map<string, RepoCtx>()
+  const repos = new Map<string, Promise<RepoCtx>>()
   const repoOf = new Map<string, RepoCtx>()
-  const ctxAt = async (dir: string) => {
-    const top = await repoToplevel(run, dir)
-    return loadRepo(deps, top ?? dir, opts.kind, repos, true)
-  }
   let rootCtx: RepoCtx
   if (projects) {
     const realRoot = realpathOr(root)
-    rootCtx = await ctxAt(realRoot)
-    for (const p of projects) {
-      repoOf.set(p.address.join('\0'), p.root === '.' ? rootCtx : await ctxAt(resolve(realRoot, p.root)))
-    }
+    const dirs = [realRoot, ...projects.map(p => (p.root === '.' ? realRoot : resolve(realRoot, p.root)))]
+    const tops = await Promise.all(dirs.map(d => repoToplevel(run, d)))
+    // Started in order (the first claims a repository shared by several members), awaited together.
+    const loaded = await Promise.all(dirs.map((d, i) => loadRepo(deps, tops[i] ?? d, opts.kind, repos, true, prefetch)))
+    rootCtx = loaded[0]!
+    projects.forEach((p, i) => repoOf.set(p.address.join('\0'), p.root === '.' ? rootCtx : loaded[i + 1]!))
   } else {
-    rootCtx = await loadRepo(deps, root, opts.kind, repos, false)
+    rootCtx = await loadRepo(deps, root, opts.kind, repos, false, prefetch)
     if (federated) {
       notes.push(
         'Federation: this Relic does not report member project roots (Relic 2.4.0+ does), so Git evidence comes from the root repository only. Work items of members may show less activity than they have.',
@@ -149,8 +162,9 @@ export async function buildStatus(deps: Deps, options: StatusOptions): Promise<S
 
   const key = trailerKey(opts.kind)
   const defaultBranch = rootCtx.defaultBranch
-  const multi = repos.size > 1
-  for (const ctx of repos.values()) {
+  const loadedRepos = await Promise.all(repos.values())
+  const multi = loadedRepos.length > 1
+  for (const ctx of loadedRepos) {
     if (!ctx.git.available) notes.push(`${tag(ctx, multi)}Git evidence unavailable: ${ctx.git.reason}.`)
     if (!ctx.host.available) {
       notes.push(

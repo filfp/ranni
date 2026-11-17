@@ -32,8 +32,30 @@ export function classifyGhFailure(stderr: string, missing: boolean): string {
   return `gh failed: ${s.split('\n')[0] || 'no output'}`
 }
 
+const LIGHT_FIELDS = 'number,title,body,headRefName,baseRefName,state,url'
+const FULL_FIELDS = 'number,title,body,headRefName,baseRefName,state,isDraft,reviewDecision,statusCheckRollup,url'
+
+function parseList(stdout: string): Record<string, unknown>[] | undefined {
+  try {
+    const list = JSON.parse(stdout)
+    return Array.isArray(list) ? list : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Checks, review decisions and drafts are expensive for the host to compute, and only open pull
+ * requests need them. So two listings run in parallel with the repository read: the open pull
+ * requests with every field, and all of them with the light fields. An open pull request takes
+ * its full record; a merged or closed one keeps the light record (no draft, review or checks).
+ */
 export async function readHost(run: Runner, cwd: string): Promise<HostRead> {
-  const repoRes = await run('gh', ['repo', 'view', '--json', 'nameWithOwner,defaultBranchRef'], { cwd })
+  const [repoRes, openRes, allRes] = await Promise.all([
+    run('gh', ['repo', 'view', '--json', 'nameWithOwner,defaultBranchRef'], { cwd }),
+    run('gh', ['pr', 'list', '--state', 'open', '--limit', String(PR_LIMIT), '--json', FULL_FIELDS], { cwd }),
+    run('gh', ['pr', 'list', '--state', 'all', '--limit', String(PR_LIMIT), '--json', LIGHT_FIELDS], { cwd }),
+  ])
   if (repoRes.code !== 0) return { ...NONE, reason: classifyGhFailure(repoRes.stderr, repoRes.missing) }
   let defaultBranch: string | undefined
   let owner: string | undefined
@@ -48,35 +70,24 @@ export async function readHost(run: Runner, cwd: string): Promise<HostRead> {
     return { ...NONE, reason: 'gh repo view returned unreadable output' }
   }
 
-  const prRes = await run(
-    'gh',
-    [
-      'pr',
-      'list',
-      '--state',
-      'all',
-      '--limit',
-      String(PR_LIMIT),
-      '--json',
-      'number,title,body,headRefName,baseRefName,state,isDraft,reviewDecision,statusCheckRollup,url',
-    ],
-    { cwd },
-  )
-  if (prRes.code !== 0) return { ...NONE, reason: classifyGhFailure(prRes.stderr, prRes.missing) }
-  let list: Record<string, unknown>[]
-  try {
-    list = JSON.parse(prRes.stdout)
-    if (!Array.isArray(list)) throw new Error('not a list')
-  } catch {
-    return { ...NONE, reason: 'gh pr list returned unreadable output' }
-  }
+  if (allRes.code !== 0) return { ...NONE, reason: classifyGhFailure(allRes.stderr, allRes.missing) }
+  if (openRes.code !== 0) return { ...NONE, reason: classifyGhFailure(openRes.stderr, openRes.missing) }
+  const all = parseList(allRes.stdout)
+  const open = parseList(openRes.stdout)
+  if (!all || !open) return { ...NONE, reason: 'gh pr list returned unreadable output' }
+
+  const full = new Map(open.map(p => [Number(p.number), p]))
+  const merged = all.map(p => full.get(Number(p.number)) ?? p)
+  // An open pull request older than the all-states window still counts.
+  const listed = new Set(all.map(p => Number(p.number)))
+  for (const p of open) if (!listed.has(Number(p.number))) merged.push(p)
   return {
     available: true,
     defaultBranch,
     owner,
     repo,
-    pullRequests: list.map(parsePr),
-    truncated: list.length >= PR_LIMIT,
+    pullRequests: merged.map(parsePr),
+    truncated: all.length >= PR_LIMIT,
   }
 }
 
