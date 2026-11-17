@@ -40,6 +40,25 @@ To parallelize, use what this harness offers: subagents, sessions, worktrees. Ha
 executor the identity and these rules, and ask it to rewrite the frontier when it stops.
 Never spawn, schedule, or poll on Ranni's behalf.
 
+## Work in Worktrees
+
+`ranni status` reads every worktree whose branch names an identity of the kind, and the
+copy of the work item there wins over the main checkout's. So when you work in a
+worktree:
+
+- keep the work item there: rewrite its frontier and set `waiting` in the worktree's
+  copy, not in the main checkout;
+- give the branch the identity before you edit the work item, or status will not see
+  your copy;
+- use one worktree per work item; when two branches name the same item, status shows
+  only the first;
+- a work item you create there is visible before it merges only if the branch names it.
+  Escalate on the item the branch names, and mention the new item in its frontier.
+
+The developer may answer `waiting` straight in the worktree's file, as an uncommitted
+change. Read the work item again before you continue, and never discard or overwrite
+uncommitted changes to it.
+
 ## Keep the Frontier Current
 
 Rewrite the current frontier, never append to it. Rewrite it when:
