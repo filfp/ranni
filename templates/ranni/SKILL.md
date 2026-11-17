@@ -87,7 +87,8 @@ Ask the developer before you change or cut intent, drop scope, or close a work i
 When a decision belongs to the developer:
 
 1. set the frontmatter key `waiting` to a one-line question;
-2. explain the options in the frontier and recommend one;
+2. write in the frontier what the developer needs to answer it, following
+   [questions.md](references/questions.md);
 3. keep working on unblocked parts, and stop mutating the blocked boundary.
 
 If the developer is present, also ask in the conversation. Remove `waiting` once the
@@ -99,6 +100,7 @@ Read a reference only when its trigger fires.
 
 **Creating a work item or a sub-item** → [work-items.md](references/work-items.md)
 **The work landed, or the developer asks to close it** → [closing.md](references/closing.md)
+**Setting `waiting`, or asking the developer to decide** → [questions.md](references/questions.md)
 
 ## Boundaries
 
