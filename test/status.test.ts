@@ -133,6 +133,43 @@ describe('buildStatus with gh', () => {
     expect(text).toContain('→ WORK-02 in flight')
   })
 
+  test('reads GitHub stack membership with the threads and shows it', async () => {
+    const prs = [
+      pr({ number: 7, title: 'Do WORK-03', baseRefName: 'feature' }),
+      pr({ number: 8, title: 'Do WORK-04' }),
+    ]
+    const run = fakeRunner(
+      baseReplies([item(3), item(4)], prs, {
+        'gh api graphql': ok(JSON.stringify({ data: { repository: {
+          p7: { reviewThreads: { nodes: [] }, stack: { number: 24, size: 6, baseRefName: 'feature' }, stackEntry: { position: 3 } },
+          p8: { reviewThreads: { nodes: [] }, stack: null, stackEntry: null },
+        } } })),
+      }),
+    )
+    const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
+    const by = Object.fromEntries(m.items.map(i => [i.id, i]))
+    expect(by['WORK-03'].pullRequests[0].stack).toEqual({ number: 24, position: 3, size: 6, base: 'feature' })
+    expect(by['WORK-04'].pullRequests[0].stack).toBeUndefined()
+    expect(by['WORK-03'].label).toBe('in-review')
+    expect(renderHuman(m)).toContain('PR #7 stack #24 3 of 6 onto feature')
+    expect(run.calls.filter(c => c.cmd === 'gh' && c.args[0] === 'api')).toHaveLength(1)
+  })
+
+  test('a host without stacked pull requests still gets its threads', async () => {
+    const run = fakeRunner(
+      baseReplies([item(3)], [pr({ number: 7, title: 'Do WORK-03' })], {
+        'gh api graphql': (args: string[]) =>
+          args.at(-1)!.includes('stackEntry')
+            ? fail("Field 'stack' doesn't exist on type 'PullRequest'")
+            : ok(JSON.stringify({ data: { repository: { p7: { reviewThreads: { nodes: [{ isResolved: false }] } } } } })),
+      }),
+    )
+    const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
+    expect(m.items[0]!.pullRequests[0]!.unresolvedThreads).toBe(1)
+    expect(m.items[0]!.pullRequests[0]!.stack).toBeUndefined()
+    expect(m.notes).toEqual([])
+  })
+
   test('sorts by last activity within a label, newest first', async () => {
     const run = fakeRunner(baseReplies([item(2), item(3)], []))
     const m = await buildStatus(deps(run), { kind: 'work', ids: [] })

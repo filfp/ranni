@@ -1,6 +1,6 @@
 import { countFailingChecks, declaresWork, mentions } from './derive'
 import type { Runner } from './runner'
-import type { PullRequestEvidence, ReviewDecision } from './types'
+import type { PullRequestEvidence, PullRequestStack, ReviewDecision } from './types'
 
 export const PR_LIMIT = 200
 /** Upper bound of open pull requests whose review threads are fetched in one call. */
@@ -117,39 +117,63 @@ export function prsFor<T extends { title: string; body: string; head: string }>(
 }
 
 /**
- * Unresolved review threads for the given open pull requests, in one bounded GraphQL
- * call. Returns undefined for a pull request whose count could not be read.
+ * Unresolved review threads and GitHub stack membership for the given open pull requests, in
+ * one bounded GraphQL call. A host without stacked pull requests rejects the stack fields; the
+ * call is then repeated without them, so threads never depend on stacks.
  */
-export async function readThreads(
+export async function readOpenDetails(
   run: Runner,
   cwd: string,
   host: Pick<HostRead, 'owner' | 'repo'>,
   numbers: number[],
-): Promise<{ counts: Map<number, number>; error?: string; skipped: number }> {
+): Promise<{
+  counts: Map<number, number>
+  stacks: Map<number, PullRequestStack>
+  error?: string
+  /** Set when the host does not report stacks. */
+  noStacks?: boolean
+  skipped: number
+}> {
   const counts = new Map<number, number>()
-  if (numbers.length === 0) return { counts, skipped: 0 }
+  const stacks = new Map<number, PullRequestStack>()
+  if (numbers.length === 0) return { counts, stacks, skipped: 0 }
   const take = numbers.slice(0, THREAD_PR_LIMIT)
   const skipped = numbers.length - take.length
   if (!host.owner || !host.repo || !/^[\w.-]+$/.test(host.owner) || !/^[\w.-]+$/.test(host.repo)) {
-    return { counts, error: 'repository owner or name unavailable', skipped }
+    return { counts, stacks, error: 'repository owner or name unavailable', skipped }
   }
-  const fields = take
-    .map(n => `p${n}: pullRequest(number: ${Number(n)}) { reviewThreads(first: 100) { nodes { isResolved } } }`)
-    .join(' ')
-  const query = `query { repository(owner: "${host.owner}", name: "${host.repo}") { ${fields} } }`
-  const res = await run('gh', ['api', 'graphql', '-f', `query=${query}`], { cwd })
-  if (res.code !== 0) return { counts, error: classifyGhFailure(res.stderr, res.missing), skipped }
+  const STACK = 'stack { number size baseRefName } stackEntry { position }'
+  const query = (withStacks: boolean) =>
+    `query { repository(owner: "${host.owner}", name: "${host.repo}") { ${take
+      .map(n => `p${Number(n)}: pullRequest(number: ${Number(n)}) { reviewThreads(first: 100) { nodes { isResolved } }${withStacks ? ` ${STACK}` : ''} }`)
+      .join(' ')} } }`
+  let noStacks = false
+  let res = await run('gh', ['api', 'graphql', '-f', `query=${query(true)}`], { cwd })
+  if (res.code !== 0 && /stack/i.test(res.stderr + res.stdout) && /doesn't exist|undefined field|cannot query field/i.test(res.stderr + res.stdout)) {
+    noStacks = true
+    res = await run('gh', ['api', 'graphql', '-f', `query=${query(false)}`], { cwd })
+  }
+  if (res.code !== 0) return { counts, stacks, error: classifyGhFailure(res.stderr, res.missing), skipped }
+  type Node = {
+    reviewThreads?: { nodes?: { isResolved?: boolean }[] }
+    stack?: { number?: number; size?: number; baseRefName?: string } | null
+    stackEntry?: { position?: number } | null
+  }
   try {
-    const j = JSON.parse(res.stdout) as {
-      data?: { repository?: Record<string, { reviewThreads?: { nodes?: { isResolved?: boolean }[] } } | null> }
-    }
+    const j = JSON.parse(res.stdout) as { data?: { repository?: Record<string, Node | null> } }
     const repo = j.data?.repository ?? {}
     for (const n of take) {
-      const nodes = repo[`p${n}`]?.reviewThreads?.nodes
+      const node = repo[`p${n}`]
+      const nodes = node?.reviewThreads?.nodes
       if (Array.isArray(nodes)) counts.set(n, nodes.filter(t => t.isResolved === false).length)
+      const st = node?.stack
+      const pos = node?.stackEntry?.position
+      if (st && typeof st.number === 'number' && typeof pos === 'number') {
+        stacks.set(n, { number: st.number, position: pos, size: Number(st.size ?? 0), base: String(st.baseRefName ?? '') })
+      }
     }
   } catch {
-    return { counts, error: 'review thread response was unreadable', skipped }
+    return { counts, stacks, error: 'review thread response was unreadable', skipped }
   }
-  return { counts, skipped }
+  return { counts, stacks, skipped, ...(noStacks ? { noStacks } : {}) }
 }

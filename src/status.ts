@@ -5,7 +5,7 @@ import { RanniError } from './errors'
 import { gitEvidenceFor, markMerged, readMerged, readRepoGit, repoToplevel } from './git'
 import type { HostRead } from './host'
 import type { RepoGit } from './git'
-import { prsFor, readHost, readThreads } from './host'
+import { prsFor, readHost, readOpenDetails } from './host'
 import { declaresRecordKind, findProjectRoot } from './project'
 import { LEGACY_KIND, trailerKey } from './kind'
 import { findRanniKind, searchWork } from './relic'
@@ -190,8 +190,9 @@ export async function buildStatus(deps: Deps, options: StatusOptions): Promise<S
         if (ctxFor(it) !== ctx) continue
         for (const p of prsFor(ctx.host.pullRequests, it.id, key)) if (p.state === 'OPEN') matchedOpen.set(p.number, p)
       }
-      const th = await readThreads(run, ctx.dir, ctx.host, [...matchedOpen.keys()])
+      const th = await readOpenDetails(run, ctx.dir, ctx.host, [...matchedOpen.keys()])
       for (const [n, c] of th.counts) matchedOpen.get(n)!.unresolvedThreads = c
+      for (const [n, st] of th.stacks) matchedOpen.get(n)!.stack = st
       if (th.error) notes.push(`${tag(ctx, multi)}Unresolved review threads unavailable: ${th.error}.`)
       if (th.skipped > 0) notes.push(`${tag(ctx, multi)}Review threads were read for ${matchedOpen.size - th.skipped} of ${matchedOpen.size} open pull requests (bounded).`)
       if (ctx.host.truncated) notes.push(`${tag(ctx, multi)}The pull request listing hit its limit; older pull requests may be missing.`)
