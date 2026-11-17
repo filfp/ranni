@@ -8,3 +8,4 @@ topology:
     br: .relic/records/business-rules
     gl: .relic/records/glossary
     epic: .relic/records/epics
+    ticket: .relic/records/ticket
