@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { RanniError } from '../src/errors'
 import { parseSearch, searchWork } from '../src/relic'
-import { fail, fakeRunner, ok, searchJson } from './fakes'
+import { fail, fakeRunner, ok, searchJson, withProjects } from './fakes'
 
 describe('parseSearch', () => {
   test('reads items, titles and outgoing links', () => {
@@ -25,6 +25,21 @@ describe('parseSearch', () => {
   test('uses metadata when the search result carries it', () => {
     const { items } = parseSearch(searchJson([{ id: 'W-1', path: 'a.md', metadata: { waiting: 'Which?' } }]))
     expect(items[0].waiting).toBe('Which?')
+  })
+})
+
+describe('projects', () => {
+  test('reads the project roots of a federated search', () => {
+    const projects = [{ address: ['root'], root: '.' }, { address: ['root', 'api'], root: 'packages/api' }]
+    expect(parseSearch(withProjects(searchJson([]), projects)).projects).toEqual(projects)
+  })
+  test('is undefined when the field is absent (Relic before 2.4.0)', () => {
+    expect(parseSearch(searchJson([])).projects).toBeUndefined()
+  })
+  test('rejects absolute and escaping roots', () => {
+    for (const root of ['/etc', '../x', 'a/../b']) {
+      expect(() => parseSearch(withProjects(searchJson([]), [{ address: ['r'], root }]))).toThrow(/unsafe project root/)
+    }
   })
 })
 

@@ -1,6 +1,10 @@
+import { realpathSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { derive } from './derive'
 import { RanniError } from './errors'
-import { gitEvidenceFor, markMerged, readMerged, readRepoGit } from './git'
+import { gitEvidenceFor, markMerged, readMerged, readRepoGit, repoToplevel } from './git'
+import type { HostRead } from './host'
+import type { RepoGit } from './git'
 import { prsFor, readHost, readThreads } from './host'
 import { declaresRecordKind, findProjectRoot } from './project'
 import { LEGACY_KIND, trailerKey } from './kind'
@@ -57,6 +61,42 @@ export interface StatusModel {
   items: ItemStatus[]
 }
 
+interface RepoCtx {
+  /** Repository top level (or the folder itself when it is in no repository). */
+  dir: string
+  git: RepoGit
+  host: HostRead
+  defaultBranch?: string
+}
+
+const realpathOr = (p: string) => {
+  try {
+    return realpathSync(p)
+  } catch {
+    return resolve(p)
+  }
+}
+
+const tag = (ctx: RepoCtx, multi: boolean) => (multi ? `${ctx.dir}: ` : '')
+
+async function loadRepo(
+  deps: Deps,
+  dir: string,
+  kind: string,
+  repos: Map<string, RepoCtx>,
+  resolved: boolean,
+): Promise<RepoCtx> {
+  const { run } = deps
+  const id = resolved ? realpathOr(dir) : dir
+  const known = repos.get(id)
+  if (known) return known
+  const git = await readRepoGit(run, dir, trailerKey(kind))
+  const host = await readHost(run, dir)
+  const ctx: RepoCtx = { dir, git, host, defaultBranch: host.defaultBranch ?? git.defaultBranch }
+  repos.set(id, ctx)
+  return ctx
+}
+
 const sameProject = (a?: string[], b?: string[]) => (a ?? []).join('/') === (b ?? []).join('/')
 
 export async function buildStatus(deps: Deps, options: StatusOptions): Promise<StatusModel> {
@@ -66,7 +106,7 @@ export async function buildStatus(deps: Deps, options: StatusOptions): Promise<S
   const opts = { ...options, kind: options.kind ?? (await findRanniKind(run, root)) ?? LEGACY_KIND }
 
   const notes: string[] = []
-  const { items: all, federated } = await searchWork(run, root, opts.kind)
+  const { items: all, federated, projects } = await searchWork(run, root, opts.kind)
 
   const wanted = opts.ids.map(i => i.toUpperCase())
   for (const w of wanted) {
@@ -81,43 +121,62 @@ export async function buildStatus(deps: Deps, options: StatusOptions): Promise<S
     )
   }
 
-  if (federated) {
-    notes.push(
-      'Federation: Relic reports member project addresses but not their filesystem roots, so Git evidence comes from the root repository only. Work items of members may show less activity than they have.',
-    )
+  // Evidence is read per Git repository. Without Relic's project roots (or outside a
+  // federation) that is the root repository; with them, each member's own folder decides,
+  // and members sharing a repository share one read.
+  const repos = new Map<string, RepoCtx>()
+  const repoOf = new Map<string, RepoCtx>()
+  const ctxAt = async (dir: string) => {
+    const top = await repoToplevel(run, dir)
+    return loadRepo(deps, top ?? dir, opts.kind, repos, true)
   }
-
-  // Git: one for-each-ref and one log for the whole repository.
-  const key = trailerKey(opts.kind)
-  const repoGit = await readRepoGit(run, root, key)
-  const git = { available: repoGit.available, reason: repoGit.reason }
-  if (!repoGit.available) notes.push(`Git evidence unavailable: ${repoGit.reason}.`)
-
-  // Git host: one PR listing, plus one bounded GraphQL call for open matching PRs.
-  const host = await readHost(run, root)
-  let defaultBranch = host.defaultBranch ?? repoGit.defaultBranch
-  if (!host.available) {
-    notes.push(
-      `Git host evidence unavailable: ${host.reason}. Showing Git evidence only; pull request state, review decisions, threads and checks are missing.`,
-    )
-    if (repoGit.available) {
-      markMerged(repoGit, await readMerged(run, root, repoGit, key))
-      if (!defaultBranch) notes.push('Default branch unknown: merged branches could not be detected.')
+  let rootCtx: RepoCtx
+  if (projects) {
+    const realRoot = realpathOr(root)
+    rootCtx = await ctxAt(realRoot)
+    for (const p of projects) {
+      repoOf.set(p.address.join('\0'), p.root === '.' ? rootCtx : await ctxAt(resolve(realRoot, p.root)))
     }
   } else {
-    const matchedOpen = new Map<number, PullRequestEvidence>()
-    for (const it of all) {
-      for (const p of prsFor(host.pullRequests, it.id, key)) if (p.state === 'OPEN') matchedOpen.set(p.number, p)
+    rootCtx = await loadRepo(deps, root, opts.kind, repos, false)
+    if (federated) {
+      notes.push(
+        'Federation: this Relic does not report member project roots (Relic 2.4.0+ does), so Git evidence comes from the root repository only. Work items of members may show less activity than they have.',
+      )
     }
-    const th = await readThreads(run, root, host, [...matchedOpen.keys()])
-    for (const [n, c] of th.counts) matchedOpen.get(n)!.unresolvedThreads = c
-    if (th.error) notes.push(`Unresolved review threads unavailable: ${th.error}.`)
-    if (th.skipped > 0) notes.push(`Review threads were read for ${matchedOpen.size - th.skipped} of ${matchedOpen.size} open pull requests (bounded).`)
-    if (host.truncated) notes.push('The pull request listing hit its limit; older pull requests may be missing.')
+  }
+  const ctxFor = (it: WorkItem) => repoOf.get((it.project ?? []).join('\0')) ?? rootCtx
+
+  const key = trailerKey(opts.kind)
+  const defaultBranch = rootCtx.defaultBranch
+  const multi = repos.size > 1
+  for (const ctx of repos.values()) {
+    if (!ctx.git.available) notes.push(`${tag(ctx, multi)}Git evidence unavailable: ${ctx.git.reason}.`)
+    if (!ctx.host.available) {
+      notes.push(
+        `${tag(ctx, multi)}Git host evidence unavailable: ${ctx.host.reason}. Showing Git evidence only; pull request state, review decisions, threads and checks are missing.`,
+      )
+      if (ctx.git.available) {
+        markMerged(ctx.git, await readMerged(run, ctx.dir, ctx.git, key))
+        if (!ctx.defaultBranch) notes.push(`${tag(ctx, multi)}Default branch unknown: merged branches could not be detected.`)
+      }
+    } else {
+      const matchedOpen = new Map<number, PullRequestEvidence>()
+      for (const it of all) {
+        if (ctxFor(it) !== ctx) continue
+        for (const p of prsFor(ctx.host.pullRequests, it.id, key)) if (p.state === 'OPEN') matchedOpen.set(p.number, p)
+      }
+      const th = await readThreads(run, ctx.dir, ctx.host, [...matchedOpen.keys()])
+      for (const [n, c] of th.counts) matchedOpen.get(n)!.unresolvedThreads = c
+      if (th.error) notes.push(`${tag(ctx, multi)}Unresolved review threads unavailable: ${th.error}.`)
+      if (th.skipped > 0) notes.push(`${tag(ctx, multi)}Review threads were read for ${matchedOpen.size - th.skipped} of ${matchedOpen.size} open pull requests (bounded).`)
+      if (ctx.host.truncated) notes.push(`${tag(ctx, multi)}The pull request listing hit its limit; older pull requests may be missing.`)
+    }
   }
 
   const derived = new Map<WorkItem, { ev: Evidence; label: Label; last?: string }>()
   for (const it of all) {
+    const { git: repoGit, host } = ctxFor(it)
     const gitEv = repoGit.available ? gitEvidenceFor(repoGit, it.id) : { branches: [], commits: [] }
     const prs: PullRequestEvidence[] = host.available ? prsFor(host.pullRequests, it.id, key) : []
     const ev: Evidence = {
@@ -125,7 +184,7 @@ export async function buildStatus(deps: Deps, options: StatusOptions): Promise<S
       pullRequests: prs,
       mergedByGit: !host.available && (gitEv.branches.some(b => b.merged === true) || gitEv.commits.some(c => c.merged === true)),
     }
-    const d = derive(it, ev, defaultBranch)
+    const d = derive(it, ev, ctxFor(it).defaultBranch)
     derived.set(it, { ev, label: d.label, last: d.lastActivity })
   }
 
@@ -179,7 +238,11 @@ export async function buildStatus(deps: Deps, options: StatusOptions): Promise<S
     generatedAt: now.toISOString(),
     root,
     ...(defaultBranch ? { defaultBranch } : {}),
-    sources: { relic: { available: true }, git, host: { available: host.available, ...(host.reason ? { reason: host.reason } : {}) } },
+    sources: {
+      relic: { available: true },
+      git: { available: rootCtx.git.available, reason: rootCtx.git.reason },
+      host: { available: rootCtx.host.available, ...(rootCtx.host.reason ? { reason: rootCtx.host.reason } : {}) },
+    },
     notes,
     items: statuses,
   }
