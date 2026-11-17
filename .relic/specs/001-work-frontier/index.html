@@ -188,6 +188,19 @@
       "Merged" is measured against the repository's default branch, as the Git host or
       <code>origin/HEAD</code> reports it, with no configuration.
     </p>
+    <p id="worktrees">
+      Agents work in their own Git worktrees and rarely touch the main checkout before their
+      pull request merges, so the work item there goes stale. Status lists the repository's
+      worktrees and, for each one whose branch names an identity of the kind, runs the same
+      <code>relic search</code> in the project's folder inside it. The copy of a work item in
+      the worktree whose branch names it replaces the checkout's, and an item that exists only
+      there is added; nothing else is taken from a worktree. The item then carries
+      <code>source</code>, the worktree's project folder and branch, so a reader that writes
+      an answer writes it there. When two worktrees name the same item, the first in Git's
+      listing wins and a note says so. Git and Git host evidence is unchanged, since worktrees
+      share their repository's refs. Worktrees are local, so another machine sees only what
+      was pushed.
+    </p>
     <p>Each work item gets the first label that applies:</p>
     <ol>
       <li><strong>Waiting on you:</strong> <code>waiting</code> is set; the question is shown.</li>

@@ -73,7 +73,8 @@ export function renderHuman(m: StatusModel): string {
     for (const it of group) {
       const age = it.ageSeconds !== undefined ? formatAge(it.ageSeconds) : '-'
       const where = it.project && it.project.length > 1 ? `[${it.project.slice(1).join('/')}] ` : ''
-      out.push(`  ${it.id.padEnd(idW)}  ${where}${it.title}  ·  ${age}`)
+      const wt = it.source ? `  ·  worktree ${it.source.branch}` : ''
+      out.push(`  ${it.id.padEnd(idW)}  ${where}${it.title}  ·  ${age}${wt}`)
       for (const l of detailLines(it, m.defaultBranch)) out.push(`  ${' '.repeat(idW)}  ${l}`)
     }
   }
