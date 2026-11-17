@@ -14,10 +14,9 @@ import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } fr
 import { fileURLToPath } from 'node:url'
 import { isMap, parseDocument } from 'yaml'
 import { RanniError } from './errors'
+import { DEFAULT_KIND, idPrefix, KIND_KEY, LEGACY_KIND, RANNI_DOC, RANNI_DOC_ID, trailerKey, validateKind } from './kind'
 import { findProjectRoot } from './project'
 
-export const WORK_KIND = 'work'
-const DEFAULT_ROOT = '.relic/records/work'
 
 const norm = (p: string) => posix.normalize(p).replace(/\/+$/, '')
 
@@ -28,7 +27,10 @@ export interface WorkRoot {
 }
 
 /** Picks the root for the work kind from the roots already declared. Pure. */
-export function chooseWorkRoot(topology: { specs?: unknown; shared?: unknown; records?: Record<string, unknown> }): WorkRoot {
+export function chooseWorkRoot(
+  topology: { specs?: unknown; shared?: unknown; records?: Record<string, unknown> },
+  kind: string = DEFAULT_KIND,
+): WorkRoot {
   const records = Object.values(topology.records ?? {}).filter((v): v is string => typeof v === 'string').map(norm)
   const taken = new Set(
     [topology.specs, topology.shared, ...records].filter((v): v is string => typeof v === 'string').map(norm),
@@ -36,7 +38,7 @@ export function chooseWorkRoot(topology: { specs?: unknown; shared?: unknown; re
   let candidate: string
   let why: string
   if (records.length === 0 || records.every(r => r.startsWith('.relic/records/'))) {
-    candidate = DEFAULT_ROOT
+    candidate = `.relic/records/${kind}`
     why = records.length === 0 ? 'no record roots declared yet' : 'the other records live under .relic/records'
   } else {
     // Sibling of the existing roots: the most common parent directory, first seen wins ties.
@@ -45,7 +47,7 @@ export function chooseWorkRoot(topology: { specs?: unknown; shared?: unknown; re
     let parent = posix.dirname(records[0])
     let best = 0
     for (const [p, c] of counts) if (c > best) { best = c; parent = p }
-    candidate = parent === '.' ? WORK_KIND : `${parent}/${WORK_KIND}`
+    candidate = parent === '.' ? kind : `${parent}/${kind}`
     why = `a sibling of the existing record roots (${parent === '.' ? 'project root' : parent})`
   }
   if (taken.has(candidate)) {
@@ -67,21 +69,84 @@ export interface YamlEdit {
  * Declares the work record kind when none exists, with the yaml Document API so comments
  * and formatting survive. Pure.
  */
-export function addWorkKind(source: string): YamlEdit {
+export function addWorkKind(source: string, kind: string = DEFAULT_KIND): YamlEdit {
   const doc = parseDocument(source)
   if (doc.errors.length) throw new RanniError(`relic.yaml is not valid YAML: ${doc.errors[0].message}`)
   const topology = doc.get('topology', true)
   if (!isMap(topology)) throw new RanniError('relic.yaml has no topology map. Run `relic verify` to see what Relic expects.')
   const records = topology.get('records', true)
-  if (isMap(records) && records.has(WORK_KIND)) {
-    const existing = records.get(WORK_KIND)
+  if (isMap(records) && records.has(kind)) {
+    const existing = records.get(kind)
     return { text: source, changed: false, workRoot: String(existing) }
   }
   const plain = doc.toJS() as { topology: { specs?: unknown; shared?: unknown; records?: Record<string, unknown> } }
-  const { path, why } = chooseWorkRoot(plain.topology)
-  if (isMap(records)) records.set(WORK_KIND, path)
-  else topology.set('records', doc.createNode({ [WORK_KIND]: path }))
+  const { path, why } = chooseWorkRoot(plain.topology, kind)
+  if (isMap(records)) records.set(kind, path)
+  else topology.set('records', doc.createNode({ [kind]: path }))
   return { text: doc.toString({ lineWidth: 0 }), changed: true, workRoot: path, why }
+}
+
+/** The generated ranni.md for a kind. */
+export function ranniDocText(kind: string): string {
+  const id = `${idPrefix(kind)}-042`
+  return `---
+id: ${RANNI_DOC_ID}
+${KIND_KEY}: ${kind}
+---
+
+# Ranni
+
+This project tracks in-flight work with Ranni. Work items are records of the \`${kind}\` kind
+declared in relic.yaml.
+
+- Identity: \`${id}\`
+- Branch: \`${kind}/${id}-short-slug\`
+- Commit trailer, and pull request body line: \`${trailerKey(kind)}: ${id}\`
+
+\`${KIND_KEY}\` above names the kind. Change it with \`ranni init --kind <kind>\`; records of the
+previous kind stay where they are.
+`
+}
+
+const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/
+
+/** The kind named by a ranni.md text, or undefined when it names none. Pure. */
+export function kindFromDoc(text: string): string | undefined {
+  const m = FRONTMATTER.exec(text)
+  if (!m) return undefined
+  const doc = parseDocument(m[1]!)
+  if (doc.errors.length) return undefined
+  const v = doc.get(KIND_KEY)
+  return typeof v === 'string' && v.trim() ? v.trim() : undefined
+}
+
+/**
+ * The ranni.md text that names `kind`. A missing file, or one still exactly as Ranni
+ * generated it, is regenerated; an edited one only gets its frontmatter key changed. Pure.
+ */
+export function ranniDocFor(kind: string, existing: string | undefined): string {
+  if (existing === undefined) return ranniDocText(kind)
+  const prev = kindFromDoc(existing)
+  if (prev === kind) return existing
+  if (prev !== undefined && existing === ranniDocText(prev)) return ranniDocText(kind)
+  const m = FRONTMATTER.exec(existing)
+  if (!m) return `---\nid: ${RANNI_DOC_ID}\n${KIND_KEY}: ${kind}\n---\n\n${existing}`
+  const doc = parseDocument(m[1]!)
+  if (doc.errors.length) throw new RanniError(`ranni.md frontmatter is not valid YAML: ${doc.errors[0].message}`)
+  if (!doc.has('id')) doc.set('id', RANNI_DOC_ID)
+  doc.set(KIND_KEY, kind)
+  return `---\n${doc.toString({ lineWidth: 0 }).replace(/\n$/, '')}\n---\n${existing.slice(m[0].length)}`
+}
+
+/**
+ * Which kind init declares: the option, else the one ranni.md names, else the legacy work
+ * kind when relic.yaml already declares it, else the default. Pure.
+ */
+export function chooseKind(option: string | undefined, docKind: string | undefined, records: Record<string, unknown> | undefined): string {
+  if (option) return validateKind(option)
+  if (docKind) return validateKind(docKind)
+  if (records && Object.hasOwn(records, LEGACY_KIND)) return LEGACY_KIND
+  return DEFAULT_KIND
 }
 
 export interface SkillChange {
@@ -186,7 +251,7 @@ export interface Io {
   err: (s: string) => void
 }
 
-export function runInit(cwd: string, io: Io, template = templateDir()): number {
+export function runInit(cwd: string, io: Io, template = templateDir(), kindOption?: string): number {
   const root = findProjectRoot(cwd)
   if (!root) {
     io.err('ranni: no relic.yaml found in this directory or above. Run `relic init` first; ranni never creates one.\n')
@@ -199,11 +264,24 @@ export function runInit(cwd: string, io: Io, template = templateDir()): number {
     return 1
   }
   const yamlPath = join(root, 'relic.yaml')
-  const edit = addWorkKind(readFileSync(yamlPath, 'utf8'))
+  const yamlText = readFileSync(yamlPath, 'utf8')
+  const topology = (parseDocument(yamlText).toJS() as { topology?: { shared?: unknown; records?: Record<string, unknown> } } | null)
+    ?.topology
+  if (typeof topology?.shared !== 'string' || !topology.shared.trim()) {
+    io.err('ranni: relic.yaml declares no topology.shared, where ranni.md lives. Run `relic verify` to see what Relic expects.\n')
+    return 1
+  }
+  const docRel = posix.join(norm(topology.shared), RANNI_DOC)
+  const docPath = join(root, docRel)
+  const docBefore = existsSync(docPath) ? readFileSync(docPath, 'utf8') : undefined
+  const kind = chooseKind(kindOption, docBefore === undefined ? undefined : kindFromDoc(docBefore), topology.records)
+  const edit = addWorkKind(yamlText, kind)
+  const docAfter = ranniDocFor(kind, docBefore)
   // Every path init writes, replaces or deletes must stay inside the project, symbolic links
   // included: a linked `.claude` or a `../` record root would otherwise reach elsewhere.
   const targets = [
     ...(edit.changed ? [join(root, edit.workRoot)] : []),
+    ...(docAfter !== docBefore ? [docPath] : []),
     ...engines.map(e => join(e, 'skills', 'ranni')),
   ]
   const escapes = targets.map(t => escapeReason(root, t)).filter((r): r is string => r !== undefined)
@@ -215,14 +293,21 @@ export function runInit(cwd: string, io: Io, template = templateDir()): number {
   const lines: string[] = []
   if (edit.changed) {
     writeFileSync(yamlPath, edit.text)
-    lines.push(`relic.yaml: declared the "${WORK_KIND}" record kind at ${edit.workRoot} (${edit.why})`)
+    lines.push(`relic.yaml: declared the "${kind}" record kind at ${edit.workRoot} (${edit.why})`)
     const dir = join(root, edit.workRoot)
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
       lines.push(`created ${edit.workRoot}/`)
     }
   } else {
-    lines.push(`relic.yaml: already declares the "${WORK_KIND}" record kind at ${edit.workRoot}`)
+    lines.push(`relic.yaml: already declares the "${kind}" record kind at ${edit.workRoot}`)
+  }
+  if (docAfter !== docBefore) {
+    mkdirSync(dirname(docPath), { recursive: true })
+    writeFileSync(docPath, docAfter)
+    lines.push(`${docRel}: ${docBefore === undefined ? 'created' : 'updated'} (${KIND_KEY}: ${kind})`)
+  } else {
+    lines.push(`${docRel}: unchanged (${KIND_KEY}: ${kind})`)
   }
   for (const eng of engines) {
     const ch = syncSkill(eng, template)

@@ -1,5 +1,6 @@
 import { RanniError } from './errors'
 import type { Runner } from './runner'
+import { KIND_KEY } from './kind'
 import type { LinkRef, WorkItem } from './types'
 
 export const SUPPORTED_FORMAT_VERSION = 1
@@ -67,6 +68,49 @@ function parseLinks(v: unknown): LinkRef[] {
 export function waitingText(v: unknown): string {
   if (v === null || v === undefined || v === '') return ''
   return String(v).replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * The work kind the root project's shared ranni.md names, from Relic's search JSON, or
+ * undefined when no shared document carries the key. Federation members' documents are
+ * ignored: the root project decides. Pure.
+ */
+export function parseRanniKind(stdout: string): string | undefined {
+  let json: { results?: unknown }
+  try {
+    json = JSON.parse(stdout)
+  } catch {
+    throw new RanniError(`relic search did not return JSON. ${MIN_RELIC}`)
+  }
+  const kinds = new Set<string>()
+  const paths: string[] = []
+  for (const r of (Array.isArray(json?.results) ? json.results : []) as Record<string, unknown>[]) {
+    if (r.type !== undefined && r.type !== 'document') continue
+    if (Array.isArray(r.project) && r.project.length > 1) continue
+    const meta = r.metadata as Record<string, unknown> | undefined
+    const v = meta && typeof meta === 'object' ? meta[KIND_KEY] : undefined
+    if (typeof v !== 'string' || !v.trim()) continue
+    kinds.add(v.trim())
+    paths.push(`${String(r.path)} (${v.trim()})`)
+  }
+  if (kinds.size > 1) {
+    throw new RanniError(`Shared documents name different work kinds with ${KIND_KEY}: ${paths.join(', ')}. Keep one.`)
+  }
+  return [...kinds][0]
+}
+
+/** Asks Relic which kind ranni.md names. */
+export async function findRanniKind(run: Runner, cwd: string): Promise<string | undefined> {
+  const res = await run('relic', ['search', '--kind', 'shared', '--meta', KIND_KEY, '--json'], { cwd })
+  if (res.missing) throw new RanniError(`relic was not found on PATH. Install Relic. ${MIN_RELIC}`)
+  if (res.code !== 0) {
+    const err = (res.stderr || res.stdout).trim()
+    if (/unknown option/i.test(err)) {
+      throw new RanniError(`The installed relic has no structured search (${err.split('\n')[0]}). ${MIN_RELIC}`)
+    }
+    throw new RanniError(`relic search failed (exit ${res.code}): ${err || 'no output'}`)
+  }
+  return parseRanniKind(res.stdout)
 }
 
 export async function searchWork(

@@ -26,7 +26,7 @@ export interface RepoGit {
 const NO_GIT: RepoGit = { available: false, refs: [], trailers: [] }
 
 /** One for-each-ref read and one log read. Both are bounded by the repository's own size. */
-export async function readRepoGit(run: Runner, cwd: string): Promise<RepoGit> {
+export async function readRepoGit(run: Runner, cwd: string, key = 'Work'): Promise<RepoGit> {
   const refsRes = await run(
     'git',
     [
@@ -49,7 +49,7 @@ export async function readRepoGit(run: Runner, cwd: string): Promise<RepoGit> {
       'log',
       '--all',
       '--no-color',
-      '--format=%H%x1f%cI%x1f%(trailers:key=Work,valueonly,unfold,separator=%x1d)%x1e',
+      `--format=%H%x1f%cI%x1f%(trailers:key=${key},valueonly,unfold,separator=%x1d)%x1e`,
     ],
     { cwd },
   )
@@ -129,14 +129,14 @@ export interface MergedRead {
  * extra reads, made only when the Git host is unavailable. The commit read keeps a work
  * item ready to close after its merged branch is deleted.
  */
-export async function readMerged(run: Runner, cwd: string, repo: RepoGit): Promise<MergedRead> {
+export async function readMerged(run: Runner, cwd: string, repo: RepoGit, key = 'Work'): Promise<MergedRead> {
   const none: MergedRead = { refs: new Set(), commits: new Set() }
   if (!repo.defaultBranch) return none
   const ref = findDefaultRef(repo.refs, repo.defaultBranch)
   if (!ref) return none
   const [refsRes, commitsRes] = await Promise.all([
     run('git', ['for-each-ref', `--merged=${ref.full}`, '--format=%(refname)', 'refs/heads', 'refs/remotes'], { cwd }),
-    run('git', ['rev-list', '--regexp-ignore-case', '--extended-regexp', '--grep=^[[:space:]]*Work:', ref.full], { cwd }),
+    run('git', ['rev-list', '--regexp-ignore-case', '--extended-regexp', `--grep=^[[:space:]]*${key}:`, ref.full], { cwd }),
   ])
   const lines = (s: string) => new Set(s.split('\n').map(l => l.trim()).filter(Boolean))
   return {

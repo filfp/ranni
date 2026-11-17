@@ -11,13 +11,14 @@ export function mentions(text: string, id: string): boolean {
 }
 
 /**
- * Whether `body` declares the identity on a `Work:` line, the same shape as the commit
- * trailer. Several identities may share one line, separated by commas or spaces. Plain
- * mentions elsewhere in the body ("depends on WORK-041") do not count.
+ * Whether `body` declares the identity on a `<Key>:` line (`Work:`, `Ticket:`), the same
+ * shape as the commit trailer. Several identities may share one line, separated by commas
+ * or spaces. Plain mentions elsewhere in the body ("depends on WORK-041") do not count.
  */
-export function declaresWork(body: string, id: string): boolean {
+export function declaresWork(body: string, id: string, key = 'Work'): boolean {
   if (!body || !id) return false
-  for (const match of body.matchAll(/^[ \t]*Work:[ \t]*(.+)$/gim)) {
+  const esc = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  for (const match of body.matchAll(new RegExp(`^[ \\t]*${esc}:[ \\t]*(.+)$`, 'gim'))) {
     if (match[1]!.split(/[\s,]+/).some(token => token.toLowerCase() === id.toLowerCase())) return true
   }
   return false

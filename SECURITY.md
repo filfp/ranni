@@ -2,7 +2,7 @@
 
 Ranni reads a Relic corpus through `relic search`, reads Git and the Git host through `git`
 and `gh`, and writes only during `ranni init`: the work kind in `relic.yaml`, the work root
-directory, and the Ranni skill next to each installed Relic skill. `ranni status` writes
+directory, the shared `ranni.md` that names the kind, and the Ranni skill next to each installed Relic skill. `ranni status` writes
 nothing. Treat work items, branch names, commit messages and pull request text as untrusted
 input.
 

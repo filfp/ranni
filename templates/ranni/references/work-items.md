@@ -15,14 +15,15 @@ or land in separate parts. Otherwise, do the work and leave no record.
 
 ## Write It
 
-Write it in the work kind's root, taken from `relic.yaml`. Allocate the identity the way
-the Relic skill does, from the greatest current identity in that root, with no counter or
-reservation. Name the file after the identity and a readable slug, for example
-`WORK-042-push-notifications.md`.
+Write it in the work kind's root, taken from `relic.yaml`. The identity is the kind in
+capitals and a number: `TICKET-042` for `ticket`. Allocate it the way the Relic skill
+does, from the greatest current identity in that root, with no counter or reservation.
+Name the file after the identity and a readable slug, for example
+`TICKET-042-push-notifications.md`.
 
 ```markdown
 ---
-id: WORK-042
+id: TICKET-042
 ---
 
 # Push notifications
@@ -38,7 +39,7 @@ Not started.
 ## Relationships
 
 - [Notifications spec](../../specs/007-notifications/index.html)
-- Depends on [WORK-041](./WORK-041-notification-api.md)
+- Depends on [TICKET-041](./TICKET-041-notification-api.md)
 ```
 
 - Only `id` is required. `waiting` is Ranni's one convention; any other key is the

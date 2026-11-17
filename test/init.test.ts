@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { addWorkKind, chooseWorkRoot, runInit, templateDir } from '../src/init'
+import { addWorkKind, chooseKind, chooseWorkRoot, kindFromDoc, ranniDocFor, ranniDocText, runInit, templateDir } from '../src/init'
 
 const dirs: string[] = []
 afterAll(() => dirs.forEach(d => rmSync(d, { recursive: true, force: true })))
@@ -43,27 +43,28 @@ describe('addWorkKind', () => {
   test('adds work and keeps comments, ordering and everything else byte for byte', () => {
     const r = addWorkKind(RELIC)
     expect(r.changed).toBe(true)
-    expect(r.workRoot).toBe('.relic/records/work')
-    expect(r.text).toBe(RELIC.replace('    gl: .relic/records/glossary\n', '    gl: .relic/records/glossary\n    work: .relic/records/work\n'))
+    expect(r.workRoot).toBe('.relic/records/ticket')
+    expect(r.text).toBe(RELIC.replace('    gl: .relic/records/glossary\n', '    gl: .relic/records/glossary\n    ticket: .relic/records/ticket\n'))
+    expect(addWorkKind(RELIC, 'task').workRoot).toBe('.relic/records/task')
   })
   test('is idempotent and leaves an existing work kind alone', () => {
     const once = addWorkKind(RELIC).text
     const twice = addWorkKind(once)
     expect(twice.changed).toBe(false)
     expect(twice.text).toBe(once)
-    const custom = addWorkKind(RELIC.replace('adr:', 'work: tasks/work\n    adr:'))
+    const custom = addWorkKind(RELIC.replace('adr:', 'work: tasks/work\n    adr:'), 'work')
     expect(custom.changed).toBe(false)
     expect(custom.workRoot).toBe('tasks/work')
   })
   test('creates records when the topology has none', () => {
     const r = addWorkKind('topology:\n  specs: s\n  shared: sh\n')
-    expect(r.text).toContain('records:\n    work: .relic/records/work')
+    expect(r.text).toContain('records:\n    ticket: .relic/records/ticket')
   })
   test('picks a sibling of record roots that live elsewhere', () => {
-    expect(chooseWorkRoot({ specs: 's', records: { note: 'docs/notes', adr: 'docs/adr' } }).path).toBe('docs/work')
-    expect(chooseWorkRoot({ records: { a: 'notes', b: 'docs/adr', c: 'docs/x' } }).path).toBe('docs/work')
-    expect(chooseWorkRoot({ records: { a: 'notes' } }).path).toBe('work')
-    expect(chooseWorkRoot({ records: { a: '.relic/records/requirements/functional' } }).path).toBe('.relic/records/work')
+    expect(chooseWorkRoot({ specs: 's', records: { note: 'docs/notes', adr: 'docs/adr' } }, 'work').path).toBe('docs/work')
+    expect(chooseWorkRoot({ records: { a: 'notes', b: 'docs/adr', c: 'docs/x' } }).path).toBe('docs/ticket')
+    expect(chooseWorkRoot({ records: { a: 'notes' } }).path).toBe('ticket')
+    expect(chooseWorkRoot({ records: { a: '.relic/records/requirements/functional' } }).path).toBe('.relic/records/ticket')
   })
   test('rejects invalid YAML or a missing topology', () => {
     expect(() => addWorkKind('topology: [')).toThrow(/not valid YAML/)
@@ -89,7 +90,7 @@ describe('runInit', () => {
     expect(existsSync(join(d, '.relic'))).toBe(false)
   })
 
-  test('declares work, creates the root, installs the skill, and finds relic.yaml from a subdirectory', () => {
+  test('declares ticket, creates the root, installs the skill, and finds relic.yaml from a subdirectory', () => {
     const d = project()
     mkdirSync(join(d, 'src', 'deep'), { recursive: true })
     const { o, io: i } = io()
@@ -97,11 +98,13 @@ describe('runInit', () => {
     const yaml = readFileSync(join(d, 'relic.yaml'), 'utf8')
     expect(yaml).toContain('# specs live here')
     expect(yaml).toContain('# glossary terms')
-    expect(yaml).toContain('work: .relic/records/work')
-    expect(existsSync(join(d, '.relic/records/work'))).toBe(true)
+    expect(yaml).toContain('ticket: .relic/records/ticket')
+    expect(existsSync(join(d, '.relic/records/ticket'))).toBe(true)
+    expect(readFileSync(join(d, '.relic/shared/ranni.md'), 'utf8')).toBe(ranniDocText('ticket'))
     expect(readFileSync(join(d, '.claude/skills/ranni/SKILL.md'), 'utf8')).toBe(readFileSync(join(templateDir(), 'SKILL.md'), 'utf8'))
     expect(existsSync(join(d, '.claude/skills/ranni/references/closing.md'))).toBe(true)
-    expect(o.out).toContain('declared the "work" record kind')
+    expect(o.out).toContain('declared the "ticket" record kind')
+    expect(o.out).toContain('.relic/shared/ranni.md: created (ranni-kind: ticket)')
     expect(o.out).toContain('.claude/skills/ranni: installed')
   })
 
@@ -137,7 +140,7 @@ describe('runInit', () => {
 
 describe('runInit stays inside the project', () => {
   test('refuses a work root that relic.yaml places outside, and changes nothing', () => {
-    const yaml = 'topology:\n  specs: .relic/specs\n  records:\n    adr: ../elsewhere/decisions\n'
+    const yaml = 'topology:\n  specs: .relic/specs\n  shared: .relic/shared\n  records:\n    adr: ../elsewhere/decisions\n'
     const d = project(yaml)
     const { o, io: x } = io()
     expect(runInit(d, x)).toBe(1)
@@ -169,5 +172,63 @@ describe('runInit stays inside the project', () => {
     const { o, io: x } = io()
     expect(runInit(d, x)).toBe(1)
     expect(o.err).toMatch(/outside the project root|is a symbolic link/)
+  })
+})
+
+describe('the work kind and ranni.md', () => {
+  test('chooseKind: option, then ranni.md, then a declared legacy work kind, then ticket', () => {
+    expect(chooseKind('task', 'ticket', { work: 'w' })).toBe('task')
+    expect(chooseKind(undefined, 'issue', { work: 'w' })).toBe('issue')
+    expect(chooseKind(undefined, undefined, { work: 'w' })).toBe('work')
+    expect(chooseKind(undefined, undefined, { adr: 'a' })).toBe('ticket')
+    expect(() => chooseKind('Ticket', undefined, undefined)).toThrow(/not a valid record kind/)
+    expect(() => chooseKind('shared', undefined, undefined)).toThrow(/reserved/)
+  })
+
+  test('ranniDocFor regenerates a generated doc and only edits the key of a hand-edited one', () => {
+    expect(kindFromDoc(ranniDocText('task'))).toBe('task')
+    expect(ranniDocFor('ticket', ranniDocText('task'))).toBe(ranniDocText('ticket'))
+    const edited = '---\nid: SHARED-ranni\nranni-kind: task # ours\nowner: me\n---\n\n# Our rules\n'
+    const next = ranniDocFor('ticket', edited)
+    expect(kindFromDoc(next)).toBe('ticket')
+    expect(next).toContain('owner: me')
+    expect(next).toContain('# Our rules')
+    expect(ranniDocFor('ticket', next)).toBe(next)
+    expect(kindFromDoc(ranniDocFor('ticket', '# no frontmatter\n'))).toBe('ticket')
+  })
+
+  test('init --kind declares that kind and names it in ranni.md', () => {
+    const d = project()
+    const { o, io: i } = io()
+    expect(runInit(d, i, undefined, 'task')).toBe(0)
+    expect(readFileSync(join(d, 'relic.yaml'), 'utf8')).toContain('task: .relic/records/task')
+    expect(kindFromDoc(readFileSync(join(d, '.relic/shared/ranni.md'), 'utf8'))).toBe('task')
+    expect(o.out).toContain('declared the "task" record kind')
+  })
+
+  test('init without --kind keeps the kind ranni.md names', () => {
+    const d = project()
+    runInit(d, io().io, undefined, 'issue')
+    const { o, io: i } = io()
+    expect(runInit(d, i)).toBe(0)
+    expect(o.out).toContain('already declares the "issue" record kind')
+    expect(o.out).toContain('ranni.md: unchanged (ranni-kind: issue)')
+  })
+
+  test('a project that already declares work keeps it and gets a ranni.md naming it', () => {
+    const d = project(RELIC.replace('adr:', 'work: .relic/records/work\n    adr:'))
+    const { o, io: i } = io()
+    expect(runInit(d, i)).toBe(0)
+    expect(o.out).toContain('already declares the "work" record kind')
+    expect(kindFromDoc(readFileSync(join(d, '.relic/shared/ranni.md'), 'utf8'))).toBe('work')
+  })
+
+  test('refuses a relic.yaml without topology.shared and changes nothing', () => {
+    const yaml = 'topology:\n  specs: .relic/specs\n  records:\n    adr: docs/adr\n'
+    const d = project(yaml)
+    const { o, io: i } = io()
+    expect(runInit(d, i)).toBe(1)
+    expect(o.err).toContain('topology.shared')
+    expect(readFileSync(join(d, 'relic.yaml'), 'utf8')).toBe(yaml)
   })
 })

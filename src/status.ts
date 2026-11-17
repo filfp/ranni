@@ -3,7 +3,8 @@ import { RanniError } from './errors'
 import { gitEvidenceFor, markMerged, readMerged, readRepoGit } from './git'
 import { prsFor, readHost, readThreads } from './host'
 import { declaresRecordKind, findProjectRoot } from './project'
-import { searchWork } from './relic'
+import { LEGACY_KIND, trailerKey } from './kind'
+import { findRanniKind, searchWork } from './relic'
 import type { Runner } from './runner'
 import { LABEL_ORDER } from './types'
 import type { Evidence, Label, PullRequestEvidence, WorkItem } from './types'
@@ -17,7 +18,8 @@ export interface Deps {
 }
 
 export interface StatusOptions {
-  kind: string
+  /** Unset: the kind ranni.md names, else the legacy work kind. */
+  kind?: string
   ids: string[]
 }
 
@@ -57,10 +59,11 @@ export interface StatusModel {
 
 const sameProject = (a?: string[], b?: string[]) => (a ?? []).join('/') === (b ?? []).join('/')
 
-export async function buildStatus(deps: Deps, opts: StatusOptions): Promise<StatusModel> {
+export async function buildStatus(deps: Deps, options: StatusOptions): Promise<StatusModel> {
   const { run, cwd, now } = deps
   const root = deps.projectRoot ?? findProjectRoot(cwd)
   if (!root) throw new RanniError('No relic.yaml found above this directory. Run `relic init`, then `ranni init`.')
+  const opts = { ...options, kind: options.kind ?? (await findRanniKind(run, root)) ?? LEGACY_KIND }
 
   const notes: string[] = []
   const { items: all, federated } = await searchWork(run, root, opts.kind)
@@ -74,7 +77,7 @@ export async function buildStatus(deps: Deps, opts: StatusOptions): Promise<Stat
 
   if (all.length === 0 && !federated && declaresRecordKind(root, opts.kind) === false) {
     notes.push(
-      `relic.yaml declares no "${opts.kind}" record kind. Run \`ranni init\` to declare the work kind, or pass --kind with a declared one.`,
+      `relic.yaml declares no "${opts.kind}" record kind. Run \`ranni init [--kind <kind>]\` to declare the work kind and name it in ranni.md, or pass --kind with a declared one.`,
     )
   }
 
@@ -85,7 +88,8 @@ export async function buildStatus(deps: Deps, opts: StatusOptions): Promise<Stat
   }
 
   // Git: one for-each-ref and one log for the whole repository.
-  const repoGit = await readRepoGit(run, root)
+  const key = trailerKey(opts.kind)
+  const repoGit = await readRepoGit(run, root, key)
   const git = { available: repoGit.available, reason: repoGit.reason }
   if (!repoGit.available) notes.push(`Git evidence unavailable: ${repoGit.reason}.`)
 
@@ -97,13 +101,13 @@ export async function buildStatus(deps: Deps, opts: StatusOptions): Promise<Stat
       `Git host evidence unavailable: ${host.reason}. Showing Git evidence only; pull request state, review decisions, threads and checks are missing.`,
     )
     if (repoGit.available) {
-      markMerged(repoGit, await readMerged(run, root, repoGit))
+      markMerged(repoGit, await readMerged(run, root, repoGit, key))
       if (!defaultBranch) notes.push('Default branch unknown: merged branches could not be detected.')
     }
   } else {
     const matchedOpen = new Map<number, PullRequestEvidence>()
     for (const it of all) {
-      for (const p of prsFor(host.pullRequests, it.id)) if (p.state === 'OPEN') matchedOpen.set(p.number, p)
+      for (const p of prsFor(host.pullRequests, it.id, key)) if (p.state === 'OPEN') matchedOpen.set(p.number, p)
     }
     const th = await readThreads(run, root, host, [...matchedOpen.keys()])
     for (const [n, c] of th.counts) matchedOpen.get(n)!.unresolvedThreads = c
@@ -115,7 +119,7 @@ export async function buildStatus(deps: Deps, opts: StatusOptions): Promise<Stat
   const derived = new Map<WorkItem, { ev: Evidence; label: Label; last?: string }>()
   for (const it of all) {
     const gitEv = repoGit.available ? gitEvidenceFor(repoGit, it.id) : { branches: [], commits: [] }
-    const prs: PullRequestEvidence[] = host.available ? prsFor(host.pullRequests, it.id) : []
+    const prs: PullRequestEvidence[] = host.available ? prsFor(host.pullRequests, it.id, key) : []
     const ev: Evidence = {
       git: gitEv,
       pullRequests: prs,
