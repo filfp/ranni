@@ -176,7 +176,7 @@
         <tr>
           <td>Git host</td>
           <td>one pull request listing, matched locally by identity</td>
-          <td>state, review decision, unresolved threads, checks</td>
+          <td>state, review decision, unresolved threads, checks, GitHub stack position</td>
         </tr>
       </tbody>
     </table>
@@ -200,6 +200,13 @@
       listing wins and a note says so. Git and Git host evidence is unchanged, since worktrees
       share their repository's refs. Worktrees are local, so another machine sees only what
       was pushed.
+    </p>
+    <p id="stacks">
+      A pull request in a GitHub stack carries the stack's number, its position (1 is closest
+      to the base), the stack's size and the branch the stack targets. It is read in the same
+      GraphQL call as review threads, and a host without stacked pull requests simply reports
+      none. It is evidence, not blocking: status shows <code>stack #24 3 of 6</code> and does
+      not decide that position 3 must wait.
     </p>
     <p>Each work item gets the first label that applies:</p>
     <ol>
@@ -294,6 +301,9 @@
       <li>reading harness-specific session state as evidence;</li>
       <li>parsing the Relic corpus itself instead of consuming Relic's read model;</li>
       <li>compatibility layers whose purpose is to keep Ranni 0.1 behavior.</li>
+      <li>evidence or output fields added because another tool consumes them. A field enters
+        <code>ranni status</code> only when its own human board or the Ranni skill uses it;
+        a consumer such as Argos needing it is not enough.</li>
     </ul>
   </section>
 

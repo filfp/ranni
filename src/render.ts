@@ -19,8 +19,12 @@ export function formatAge(seconds: number): string {
 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
 
-function prLine(p: ItemStatus['pullRequests'][number]): string {
+function prLine(p: ItemStatus['pullRequests'][number], defaultBranch?: string): string {
   const bits: string[] = []
+  if (p.stack) {
+    const onto = p.stack.base && p.stack.base !== defaultBranch ? ` onto ${p.stack.base}` : ''
+    bits.push(`stack #${p.stack.number} ${p.stack.position} of ${p.stack.size}${onto}`)
+  }
   if (p.reviewDecision === 'CHANGES_REQUESTED') bits.push('changes requested')
   else if (p.reviewDecision === 'APPROVED') bits.push('approved')
   if (p.unresolvedThreads) bits.push(plural(p.unresolvedThreads, 'unresolved thread'))
@@ -44,7 +48,7 @@ export function detailLines(it: ItemStatus, defaultBranch?: string): string[] {
     }
   }
   if (it.label === 'in-review' || it.label === 'waiting') {
-    for (const p of open) lines.push(prLine(p))
+    for (const p of open) lines.push(prLine(p, defaultBranch))
   }
   if (it.label === 'in-flight') {
     const parts: string[] = []

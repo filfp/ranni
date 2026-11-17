@@ -64,6 +64,9 @@ and links to related work items (`-> TICKET-041 in review`):
 4. In flight: branches or commits, no pull request yet.
 5. Not started: no traces.
 
+An open pull request in a GitHub stack shows its place in it (`stack #24 3 of 6`, and the
+branch the stack targets when it is not the default branch): the ones below land first.
+
 There is no staleness threshold and no computed blocking; the reader decides.
 
 Agents usually work in their own Git worktrees, so status also reads every worktree of the

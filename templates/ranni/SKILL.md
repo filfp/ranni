@@ -23,6 +23,9 @@ records, and persistence. This skill covers work items only.
    branch name, then a search by subject, using native tools or
    `relic search --kind <kind>`.
 3. Read its intent, its current frontier, and the links that matter before acting.
+4. If `ranni status` shows its pull request in a GitHub stack (`stack #24 3 of 6`), the
+   pull requests below it land first. Review, fix and merge in that order, and say so in
+   the frontier when the order matters for the next step.
 
 A small task needs no work item. Using Ranni creates no obligation.
 

@@ -76,6 +76,21 @@ export interface PullRequestEvidence {
   failingChecks: number
   /** Undefined when threads were not fetched or the fetch failed. */
   unresolvedThreads?: number
+  /**
+   * The GitHub stack this open pull request belongs to, when the host reports one: the pull
+   * requests at lower positions land before it. Evidence only; Ranni computes no blocking.
+   */
+  stack?: PullRequestStack
+}
+
+export interface PullRequestStack {
+  /** The stack's number in its repository. */
+  number: number
+  /** 1 is closest to the stack's base branch. */
+  position: number
+  size: number
+  /** The branch the stack targets. */
+  base: string
 }
 
 export interface Evidence {
