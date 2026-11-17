@@ -9,9 +9,11 @@ import { buildStatus } from './status'
 const HELP = `ranni: the work frontier agents leave behind
 
 Usage:
-  ranni init                              Declare the work kind in relic.yaml and install the Ranni skill
+  ranni init [--kind <kind>]              Declare the work kind in relic.yaml, name it in the shared
+                                          ranni.md, and install the Ranni skill (default kind: ticket)
   ranni status [id...] [--json] [--kind <kind>]
-                                          Board derived from Relic, Git and the Git host (default kind: work)
+                                          Board derived from Relic, Git and the Git host
+                                          (default kind: the one ranni.md names, else work)
   ranni --help | --version
 `
 
@@ -33,12 +35,21 @@ export async function main(argv: string[], cwd: string, io: Io): Promise<number>
         return 0
       }
       case 'init': {
-        if (rest.length) throw new RanniError(`ranni init takes no arguments (got "${rest[0]}").`)
-        return runInit(cwd, io)
+        let kind: string | undefined
+        for (let i = 0; i < rest.length; i++) {
+          const a = rest[i]
+          if (a === '--kind') {
+            const v = rest[++i]
+            if (!v || v.startsWith('-')) throw new RanniError('--kind needs a value.')
+            kind = v
+          } else if (a.startsWith('--kind=')) kind = a.slice('--kind='.length)
+          else throw new RanniError(`ranni init takes only --kind (got "${a}").`)
+        }
+        return runInit(cwd, io, undefined, kind)
       }
       case 'status': {
         let json = false
-        let kind = 'work'
+        let kind: string | undefined
         const ids: string[] = []
         for (let i = 0; i < rest.length; i++) {
           const a = rest[i]

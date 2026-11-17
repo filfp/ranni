@@ -1,6 +1,6 @@
 ---
 name: ranni
-description: Use Ranni's work frontier to pick up, continue, hand off, and close in-flight work that outlives one session or one agent. Use when the repository's relic.yaml declares a work record kind, the developer names a work item such as WORK-042, the current branch name contains a work identity, or the developer asks to track, split, hand off, or check ongoing work.
+description: Use Ranni's work frontier to pick up, continue, hand off, and close in-flight work that outlives one session or one agent. Use when the repository has a shared ranni.md or its relic.yaml declares a work record kind, the developer names a work item such as TICKET-042 or WORK-042, the current branch name contains a work identity, or the developer asks to track, split, hand off, or check ongoing work.
 ---
 
 # Ranni
@@ -14,23 +14,27 @@ records, and persistence. This skill covers work items only.
 
 ## Find the Work
 
-1. Read the `relic.yaml` that Relic selects. The work kind is `work` unless the
-   developer names another declared kind. If no work kind is declared, say so and
-   continue without Ranni.
+1. Find the work kind. The shared document `ranni.md` (in the `shared` root of the
+   `relic.yaml` that Relic selects) names it in its `ranni-kind` key, for example
+   `ticket`. Without that document the kind is `work`. The developer may name another
+   declared kind. If the kind is not declared in `relic.yaml`, say so and continue
+   without Ranni.
 2. Locate the item. Use the one the developer names, then the identity in the current
-   branch name, then a search by subject, using native tools or `relic search --kind work`.
+   branch name, then a search by subject, using native tools or
+   `relic search --kind <kind>`.
 3. Read its intent, its current frontier, and the links that matter before acting.
 
 A small task needs no work item. Using Ranni creates no obligation.
 
 ## Leave Traces
 
-Every executor follows the same contract, including you:
+Every executor follows the same contract, including you. The names follow the kind;
+with `ticket`:
 
-- the branch name contains the identity, for example `work/WORK-042-push`;
-- every commit carries the trailer `Work: WORK-042`;
-- the pull request title mentions the identity, or its body carries `Work: WORK-042`.
-  Mentioning another item in the body ("depends on WORK-041") does not tie the PR to it.
+- the branch name contains the identity, for example `ticket/TICKET-042-push`;
+- every commit carries the trailer `Ticket: TICKET-042` (the kind, capitalized);
+- the pull request title mentions the identity, or its body carries `Ticket: TICKET-042`.
+  Mentioning another item in the body ("depends on TICKET-041") does not tie the PR to it.
 
 To parallelize, use what this harness offers: subagents, sessions, worktrees. Hand each
 executor the identity and these rules, and ask it to rewrite the frontier when it stops.
@@ -80,4 +84,5 @@ Read a reference only when its trigger fires.
   host at read time.
 - Do not treat harness-specific session state as evidence.
 - Do not dispatch follow-up work automatically or require a polling loop.
-- Do not add a Ranni configuration file or reserve topology inside Relic.
+- Do not add a Ranni configuration file or reserve topology inside Relic. The shared
+  `ranni.md` is an ordinary Relic document; `ranni init` writes it.

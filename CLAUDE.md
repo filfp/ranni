@@ -21,7 +21,8 @@ relic verify        # this repo is a Relic project
 ## Layout
 
 - `src/cli.ts`, `src/index.ts`: argument parsing and entry point
-- `src/init.ts`: `ranni init` (relic.yaml edit through the `yaml` Document API, skill sync)
+- `src/init.ts`: `ranni init` (relic.yaml edit through the `yaml` Document API, ranni.md, skill sync)
+- `src/kind.ts`: kind defaults, validation, trailer key and identity prefix
 - `src/status.ts`: orchestration of one `status` read; `src/render.ts`: human board
 - `src/derive.ts`: pure label derivation; keep it free of I/O
 - `src/relic.ts`, `src/git.ts`, `src/host.ts`: the three evidence sources
@@ -46,4 +47,7 @@ copy to GitHub Packages as `@filfp/ranni-cli`.
 - Never spawn, schedule or configure agents; never read harness-specific session state.
 - No staleness thresholds and no computed blocking.
 - `ranni init` never creates `relic.yaml` and never touches it beyond declaring the work kind.
+- The work kind is named by the shared Relic document `ranni.md` (`ranni-kind`), read through
+  `relic search --meta`. Never add a Ranni key to `relic.yaml` (Relic rejects unknown keys) or a
+  Ranni config file. Trailer and identity prefix derive from the kind (`src/kind.ts`).
 - The npm package is `ranni-cli` (`ranni` was refused by npm as too similar to another name; 0.1.x shipped the old MCP orchestrator as `ranni-mcp`). Version bumps are the developer's call.

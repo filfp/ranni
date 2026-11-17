@@ -41,8 +41,10 @@
       Relic never knows Ranni exists. Projects that use only Relic see no change.
     </p>
     <ul>
-      <li>Work items are an ordinary record kind declared by the host project in its <code>relic.yaml</code>, for example <code>work: .relic/records/work</code> with identities such as <code>WORK-001</code>. Relic reserves nothing for Ranni and Ranni adds no configuration file.</li>
-      <li>Ranni reads the kind named <code>work</code> by default; an option names another declared kind.</li>
+      <li>Work items are an ordinary record kind declared by the host project in its <code>relic.yaml</code>, for example <code>ticket: .relic/records/ticket</code> with identities such as <code>TICKET-001</code>. Relic reserves nothing for Ranni and Ranni adds no configuration file.</li>
+      <li>The project names its work kind in an ordinary shared Relic document, <code>&lt;shared&gt;/ranni.md</code> with <code>id: SHARED-ranni</code> and the metadata key <code>ranni-kind</code>. Relic keeps metadata opaque, so the name lives in the corpus, indexed and versioned, without a Ranni key in <code>relic.yaml</code> (which accepts only <code>topology</code> and <code>federation</code>) and without a configuration file of Ranni's own. Records never refer to it.</li>
+      <li>Ranni reads the kind that <code>ranni.md</code> names, found with <code>relic search --kind shared --meta ranni-kind --json</code>; without it, the kind named <code>work</code>; an option names another declared kind. Federation members' <code>ranni.md</code> are ignored: the root project decides. Two root documents naming different kinds are an error.</li>
+      <li>The kind sets the names executors use: identities are the kind in capitals and a number (<code>TICKET-042</code>), branches start with the kind (<code>ticket/TICKET-042-push</code>), and the trailer is the kind capitalized (<code>Ticket: TICKET-042</code>).</li>
       <li>Selection goes through Relic's structured search (<code>relic search --kind work --meta … --json</code>), which Relic accepts on its own merits in its <code>003-structured-search</code> specification. Ranni declares which versions of that JSON format it supports. Relic filters combine only with AND; when Ranni needs another combination, it runs several searches and merges the results itself.</li>
       <li>Relic's search, viewer, verify, links, backlinks, and federation work on work items unchanged. In a federated project, work spread across member repositories composes for free.</li>
       <li>There is no plugin contract in Relic. Ranni extends Relic by consuming its public read model, not by being loaded into it.</li>
@@ -141,8 +143,8 @@
     </p>
     <ul>
       <li>the branch name contains the identity, for example <code>work/WORK-042-push</code>;</li>
-      <li>commits carry a trailer such as <code>Work: WORK-042</code>;</li>
-      <li>the pull request title or head branch mentions the identity, or its body carries a line such as <code>Work: WORK-042</code>; a plain mention in the body, such as "depends on WORK-041", is not evidence;</li>
+      <li>commits carry the kind's trailer, such as <code>Ticket: TICKET-042</code>;</li>
+      <li>the pull request title or head branch mentions the identity, or its body carries the trailer line, such as <code>Ticket: TICKET-042</code>; a plain mention in the body, such as "depends on TICKET-041", is not evidence;</li>
       <li>the current frontier section is updated at natural stopping points.</li>
     </ul>
     <p>
@@ -250,7 +252,9 @@
             Idempotent setup, mirroring <code>relic init</code>:
             <ul>
               <li>it requires an existing <code>relic.yaml</code> and never creates one;</li>
-              <li>it declares the <code>work</code> record kind only if none is declared, and leaves the rest of the file untouched;</li>
+              <li>it takes the kind from <code>--kind</code>, else from <code>ranni.md</code>, else <code>work</code> when <code>relic.yaml</code> already declares it, else <code>ticket</code>;</li>
+              <li>it declares that record kind only if it is not declared, and leaves the rest of the file untouched;</li>
+              <li>it writes <code>&lt;shared&gt;/ranni.md</code> naming the kind; on an edited document it changes only the <code>ranni-kind</code> key;</li>
               <li>it installs or refreshes the Ranni skill next to every installed Relic skill, so engine discovery stays Relic's.</li>
             </ul>
             Running it again only refreshes the skill.

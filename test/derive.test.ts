@@ -104,6 +104,8 @@ describe('declaresWork and prsFor', () => {
     expect(declaresWork('Depends on WORK-041', 'WORK-041')).toBe(false)
     expect(declaresWork('Work: WORK-0421', 'WORK-042')).toBe(false)
     expect(declaresWork('Homework: WORK-042', 'WORK-042')).toBe(false)
+    expect(declaresWork('Ticket: TICKET-7', 'TICKET-7', 'Ticket')).toBe(true)
+    expect(declaresWork('Work: TICKET-7', 'TICKET-7', 'Ticket')).toBe(false)
   })
 
   test('a plain body mention does not tie a PR to a work item', async () => {

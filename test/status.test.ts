@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { renderHuman, formatAge } from '../src/render'
 import { buildStatus } from '../src/status'
 import { classifyGhFailure, parsePr } from '../src/host'
+import { parseRanniKind } from '../src/relic'
 import { fail, fakeRunner, ok, searchJson } from './fakes'
 
 const NOW = new Date('2026-06-10T12:00:00Z')
@@ -198,11 +199,49 @@ describe('undeclared work kind', () => {
   test('says the kind is not declared and how to fix it', async () => {
     const m = await withYaml('topology:\n  specs: .relic/specs\n  records:\n    adr: .relic/records/decisions\n')
     expect(m.notes.join(' ')).toContain('relic.yaml declares no "work" record kind')
-    expect(renderHuman(m)).toContain('Run `ranni init`')
+    expect(renderHuman(m)).toContain('Run `ranni init')
   })
 
   test('stays quiet when the kind is declared but has no items', async () => {
     const m = await withYaml('topology:\n  specs: .relic/specs\n  records:\n    work: .relic/records/work\n')
     expect(m.notes.join(' ')).not.toContain('declares no')
+  })
+})
+
+describe('the kind ranni.md names', () => {
+  const shared = (docs: { path: string; kind?: string; project?: string[] }[]) =>
+    JSON.stringify({
+      formatVersion: 1,
+      results: docs.map(d => ({ type: 'document', path: d.path, id: 'SHARED-ranni', memberships: ['shared'], ...(d.project ? { project: d.project } : {}), metadata: d.kind ? { 'ranni-kind': d.kind } : {} })),
+    })
+
+  test('parses it, ignores federation members, and refuses two different kinds', () => {
+    expect(parseRanniKind(shared([]))).toBeUndefined()
+    expect(parseRanniKind(shared([{ path: '.relic/shared/ranni.md', kind: 'ticket' }]))).toBe('ticket')
+    expect(parseRanniKind(shared([{ path: 'a', kind: 'ticket' }, { path: 'b', kind: 'task', project: ['root', 'api'] }]))).toBe('ticket')
+    expect(() => parseRanniKind(shared([{ path: 'a', kind: 'ticket' }, { path: 'b', kind: 'task' }]))).toThrow(/different work kinds/)
+  })
+
+  test('status without --kind searches that kind and reads its trailer', async () => {
+    const run = fakeRunner({
+      'relic search --kind shared --meta ranni-kind': ok(shared([{ path: '.relic/shared/ranni.md', kind: 'ticket' }])),
+      'relic search --kind ticket': ok(searchJson([{ id: 'TICKET-01', path: 't/TICKET-01.md' }])),
+      'git for-each-ref --format': ok(refsOut),
+      'git log': ok('c9\x1f2026-06-09T12:00:00+00:00\x1fTICKET-01\x1e'),
+      'gh repo view': ok(JSON.stringify({ nameWithOwner: 'o/r', defaultBranchRef: { name: 'main' } })),
+      'gh pr list': ok(JSON.stringify([pr({ number: 9, body: 'Ticket: TICKET-01' })])),
+      'gh api graphql': ok(JSON.stringify({ data: {} })),
+    })
+    const m = await buildStatus(deps(run), { ids: [] })
+    expect(m.kind).toBe('ticket')
+    expect(m.items[0]).toMatchObject({ id: 'TICKET-01', label: 'in-review', trailerCommits: 1 })
+    const log = run.calls.find(c => c.cmd === 'git' && c.args[0] === 'log')!
+    expect(log.args.join(' ')).toContain('trailers:key=Ticket,')
+  })
+
+  test('falls back to the work kind when no ranni.md names one', async () => {
+    const run = fakeRunner(baseReplies([item(1)], []))
+    const m = await buildStatus(deps(run), { ids: [] })
+    expect(m.kind).toBe('work')
   })
 })

@@ -101,8 +101,8 @@ export function parsePr(p: Record<string, unknown>): PullRequestEvidence & { bod
  * a `Work:` line in the body. A plain body mention is not evidence, so a PR saying
  * "depends on WORK-041" never makes WORK-041 look landed.
  */
-export function prsFor<T extends { title: string; body: string; head: string }>(prs: T[], id: string): T[] {
-  return prs.filter(p => mentions(p.title, id) || mentions(p.head, id) || declaresWork(p.body, id))
+export function prsFor<T extends { title: string; body: string; head: string }>(prs: T[], id: string, key = 'Work'): T[] {
+  return prs.filter(p => mentions(p.title, id) || mentions(p.head, id) || declaresWork(p.body, id, key))
 }
 
 /**
