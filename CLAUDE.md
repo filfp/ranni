@@ -26,6 +26,7 @@ relic verify        # this repo is a Relic project
 - `src/status.ts`: orchestration of one `status` read; `src/render.ts`: human board
 - `src/derive.ts`: pure label derivation; keep it free of I/O
 - `src/relic.ts`, `src/git.ts`, `src/host.ts`: the three evidence sources
+- `src/worktree.ts`: work items read from other worktrees whose branch names them
 - `src/runner.ts`: the only place subprocesses start; tests inject a fake (`test/fakes.ts`)
 - `templates/ranni/`: the skill this CLI installs. It is the product's text; do not edit it casually.
 

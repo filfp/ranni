@@ -126,7 +126,8 @@ describe('buildStatus with gh', () => {
     // two gh PR listings (open, all), one graphql, no git-only merged read
     expect(run.calls.filter(c => c.cmd === 'gh' && c.args[0] === 'pr')).toHaveLength(2)
     expect(run.calls.filter(c => c.cmd === 'gh' && c.args[0] === 'api')).toHaveLength(1)
-    expect(run.calls.filter(c => c.cmd === 'git')).toHaveLength(2)
+    // for-each-ref, log, worktree list
+    expect(run.calls.filter(c => c.cmd === 'git')).toHaveLength(3)
     const text = renderHuman(m)
     expect(text).toContain('changes requested · 2 unresolved threads · 1 failing check')
     expect(text).toContain('→ WORK-02 in flight')

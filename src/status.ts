@@ -9,9 +9,10 @@ import { prsFor, readHost, readThreads } from './host'
 import { declaresRecordKind, findProjectRoot } from './project'
 import { LEGACY_KIND, trailerKey } from './kind'
 import { findRanniKind, searchWork } from './relic'
+import { listWorktrees, overlayWorktrees, readWorktrees } from './worktree'
 import type { Runner } from './runner'
 import { LABEL_ORDER } from './types'
-import type { Evidence, Label, PullRequestEvidence, WorkItem } from './types'
+import type { Evidence, ItemSource, Label, PullRequestEvidence, WorkItem } from './types'
 
 export interface Deps {
   run: Runner
@@ -32,6 +33,8 @@ export interface ItemStatus {
   title: string
   path: string
   project?: string[]
+  /** Set when the item was read from another worktree; its path is relative to `source.root`. */
+  source?: ItemSource
   label: Label
   waiting?: string
   lastActivity?: string
@@ -118,10 +121,17 @@ export async function buildStatus(deps: Deps, options: StatusOptions): Promise<S
   if (!root) throw new RanniError('No relic.yaml found above this directory. Run `relic init`, then `ranni init`.')
   // The host read needs neither the kind nor the work items, so it starts now and overlaps them.
   const prefetch: Prefetch = { dir: root, host: readHost(run, root) }
+  const worktrees = listWorktrees(run, root)
   const opts = { ...options, kind: options.kind ?? (await findRanniKind(run, root)) ?? LEGACY_KIND }
 
   const notes: string[] = []
-  const { items: all, federated, projects } = await searchWork(run, root, opts.kind)
+  // Agents work in other worktrees and rarely touch the main checkout before their pull
+  // request merges, so the copy of an item in the worktree whose branch names it wins.
+  const [{ items: checkout, federated, projects }, wtReads] = await Promise.all([
+    searchWork(run, root, opts.kind),
+    worktrees.then(w => readWorktrees(run, root, opts.kind, w, notes)),
+  ])
+  const all = overlayWorktrees(checkout, wtReads, notes)
 
   const wanted = opts.ids.map(i => i.toUpperCase())
   for (const w of wanted) {
@@ -203,6 +213,7 @@ export async function buildStatus(deps: Deps, options: StatusOptions): Promise<S
   }
 
   const byPath = (it: WorkItem, path: string) =>
+    all.find(o => o !== it && o.path === path && sameProject(o.project, it.project) && o.source?.root === it.source?.root) ??
     all.find(o => o !== it && o.path === path && sameProject(o.project, it.project))
 
   const statuses: ItemStatus[] = all
@@ -223,6 +234,7 @@ export async function buildStatus(deps: Deps, options: StatusOptions): Promise<S
         title: it.title,
         path: it.path,
         ...(it.project ? { project: it.project } : {}),
+        ...(it.source ? { source: it.source } : {}),
         label,
         ...(it.waiting !== undefined ? { waiting: it.waiting } : {}),
         ...(last ? { lastActivity: last, ageSeconds: Math.max(0, Math.round((now.getTime() - Date.parse(last)) / 1000)) } : {}),

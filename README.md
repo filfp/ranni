@@ -66,6 +66,12 @@ and links to related work items (`-> TICKET-041 in review`):
 
 There is no staleness threshold and no computed blocking; the reader decides.
 
+Agents usually work in their own Git worktrees, so status also reads every worktree of the
+repository whose branch names an identity of the kind. The copy of a work item in the worktree
+whose branch names it (`ticket/TICKET-042-push` for `TICKET-042`) replaces the checkout's, and
+one that exists only there is added. In `--json`, such an item carries
+`source: { root, branch }`: its `path` is relative to that worktree's project folder.
+
 ## The executor contract
 
 Any agent or human leaves traces the board can read. With the `ticket` kind:

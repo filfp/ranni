@@ -22,6 +22,15 @@ export interface WorkItem {
   waiting?: string
   /** Outgoing links as resolved by Relic. */
   links: LinkRef[]
+  /** Set when the item was read from another worktree, whose branch names it. */
+  source?: ItemSource
+}
+
+/** Where a work item was read when it came from another worktree than the one status runs in. */
+export interface ItemSource {
+  /** Absolute folder of the project (the one holding relic.yaml) inside that worktree. */
+  root: string
+  branch: string
 }
 
 export interface LinkRef {
