@@ -43,6 +43,7 @@ function baseReplies(items: object[], prs: object[] | null, extra: Record<string
       ? ok(JSON.stringify({ nameWithOwner: 'o/r', defaultBranchRef: { name: 'main' } }))
       : { code: 127, missing: true },
     'gh pr list': ok(JSON.stringify(prs ?? [])),
+    ...extra,
   }
 }
 
