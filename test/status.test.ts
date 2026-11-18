@@ -379,3 +379,54 @@ describe('the kind ranni.md names', () => {
     expect(m.kind).toBe('work')
   })
 })
+
+describe('pull requests no work item claims', () => {
+  const author = (login: string, is_bot = false) => ({ author: { login, is_bot }, updatedAt: '2026-06-09T12:00:00Z' })
+  const prs = [
+    pr({ number: 7, title: 'Do WORK-03', ...author('ana') }),
+    pr({ number: 9, title: 'Fix the login copy', headRefName: 'fix/login', reviewDecision: 'APPROVED', ...author('bia') }),
+    pr({ number: 10, title: 'Older open one', headRefName: 'chore/x', isDraft: true, ...author('caio'), updatedAt: '2026-06-01T12:00:00Z' }),
+    pr({ number: 11, title: 'Bump yaml', headRefName: 'dependabot/npm/yaml', ...author('app/dependabot', true) }),
+    pr({ number: 12, title: 'Bump bun', headRefName: 'renovate/bun', ...author('renovate[bot]') }),
+    pr({ number: 13, title: 'Landed without a ticket', state: 'MERGED', ...author('ana') }),
+    pr({ number: 14, title: 'Thrown away', state: 'CLOSED', ...author('ana') }),
+  ]
+
+  test('lists open human pull requests no item names, newest first, with review evidence', async () => {
+    const graphql = ok(JSON.stringify({ data: { repository: { p7: { reviewThreads: { nodes: [] } }, p9: { reviewThreads: { nodes: [{ isResolved: false }] } }, p10: { reviewThreads: { nodes: [] } } } } }))
+    const run = fakeRunner(baseReplies([item(3)], prs, { 'gh api graphql': graphql }))
+    const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
+    expect(m.untracked.map(p => p.number)).toEqual([9, 10])
+    expect(m.untracked[0]).toMatchObject({ author: 'bia', head: 'fix/login', reviewDecision: 'APPROVED', unresolvedThreads: 1, ageSeconds: 86400 })
+    expect(m.untracked[1]).toMatchObject({ isDraft: true })
+    expect(m.untracked[0]).not.toHaveProperty('body')
+    expect(m.untracked[0]).not.toHaveProperty('repo')
+    // The work item's own pull request is asked for first.
+    const q = run.calls.find(c => c.args[0] === 'api')!.args.at(-1)!
+    expect(q.indexOf('p7:')).toBeLessThan(q.indexOf('p9:'))
+  })
+
+  test('narrowing by id leaves them out', async () => {
+    const run = fakeRunner(baseReplies([item(3)], prs, { 'gh api graphql': ok('{"data":{"repository":{}}}') }))
+    const m = await buildStatus(deps(run), { kind: 'work', ids: ['WORK-03'] })
+    expect(m.untracked).toEqual([])
+  })
+
+  test('without gh there are none, and the board still renders', async () => {
+    const run = fakeRunner(baseReplies([item(3)], null))
+    const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
+    expect(m.untracked).toEqual([])
+  })
+
+  test('the human board shows them after the items, and even with no items', async () => {
+    const run = fakeRunner(baseReplies([], prs, { 'gh api graphql': ok('{"data":{"repository":{}}}') }))
+    const m = await buildStatus(deps(run), { kind: 'work', ids: [] })
+    const out = renderHuman(m)
+    expect(out).toContain('Pull requests with no work (3)')
+    expect(out).toContain('#7   Do WORK-03  ·  @ana  ·  1d\n  #9 ')
+    expect(out).toContain('#9   Fix the login copy  ·  @bia  ·  1d')
+    expect(out).toContain('fix/login  ·  approved')
+    expect(out).toContain('chore/x  ·  (draft)')
+    expect(out).not.toContain('Bump')
+  })
+})
