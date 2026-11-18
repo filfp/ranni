@@ -67,6 +67,12 @@ and links to related work items (`-> TICKET-041 in review`):
 An open pull request in a GitHub stack shows its place in it (`stack #24 3 of 6`, and the
 branch the stack targets when it is not the default branch): the ones below land first.
 
+After the board, status lists the open pull requests no work item claims (`Pull requests with
+no ticket`), with author, head branch, last update and review evidence, so work done outside
+Ranni still shows up. Bot and app authors, merged and closed pull requests are left out, and
+narrowing to ids drops the list. In `--json` it is `untracked`. Ranni never turns one into a
+work item; write one that names the pull request to adopt it.
+
 There is no staleness threshold and no computed blocking; the reader decides.
 
 Agents usually work in their own Git worktrees, so status also reads every worktree of the

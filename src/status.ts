@@ -5,7 +5,7 @@ import { RanniError } from './errors'
 import { gitEvidenceFor, markMerged, readMerged, readRepoGit, repoToplevel } from './git'
 import type { HostRead } from './host'
 import type { RepoGit } from './git'
-import { prsFor, readHost, readOpenDetails } from './host'
+import { prsFor, readHost, readOpenDetails, untrackedPrs } from './host'
 import { declaresRecordKind, findProjectRoot } from './project'
 import { LEGACY_KIND, trailerKey } from './kind'
 import { findRanniKind, searchWork } from './relic'
@@ -47,6 +47,21 @@ export interface ItemStatus {
   links: { id: string; title: string; label: Label }[]
 }
 
+/**
+ * An open pull request no work item claims (bots and apps left out). It is evidence that work
+ * exists outside the frontier, for the reader to adopt into a work item or ignore.
+ */
+export interface UntrackedPullRequest extends PullRequestEvidence {
+  head: string
+  /** Author login; empty when the host reports none. */
+  author: string
+  /** ISO date of the host's last update. */
+  updatedAt: string
+  ageSeconds?: number
+  /** The repository folder it was read in, set only when status read more than one repository. */
+  repo?: string
+}
+
 export interface SourceState {
   available: boolean
   reason?: string
@@ -62,6 +77,8 @@ export interface StatusModel {
   /** Limitations the reader should know about, in plain language. */
   notes: string[]
   items: ItemStatus[]
+  /** Open pull requests no work item claims, newest update first. Empty when ids narrow the read. */
+  untracked: UntrackedPullRequest[]
 }
 
 interface RepoCtx {
@@ -174,6 +191,7 @@ export async function buildStatus(deps: Deps, options: StatusOptions): Promise<S
   const defaultBranch = rootCtx.defaultBranch
   const loadedRepos = await Promise.all(repos.values())
   const multi = loadedRepos.length > 1
+  const untracked: UntrackedPullRequest[] = []
   for (const ctx of loadedRepos) {
     if (!ctx.git.available) notes.push(`${tag(ctx, multi)}Git evidence unavailable: ${ctx.git.reason}.`)
     if (!ctx.host.available) {
@@ -186,15 +204,32 @@ export async function buildStatus(deps: Deps, options: StatusOptions): Promise<S
       }
     } else {
       const matchedOpen = new Map<number, PullRequestEvidence>()
+      // Any work item's claim counts, whichever repository it is read against, so a pull
+      // request is never shown as untracked while some item already names it.
+      const claimed = new Set<number>()
       for (const it of all) {
-        if (ctxFor(it) !== ctx) continue
-        for (const p of prsFor(ctx.host.pullRequests, it.id, key)) if (p.state === 'OPEN') matchedOpen.set(p.number, p)
+        for (const p of prsFor(ctx.host.pullRequests, it.id, key)) {
+          claimed.add(p.number)
+          if (ctxFor(it) === ctx && p.state === 'OPEN') matchedOpen.set(p.number, p)
+        }
       }
-      const th = await readOpenDetails(run, ctx.dir, ctx.host, [...matchedOpen.keys()])
-      for (const [n, c] of th.counts) matchedOpen.get(n)!.unresolvedThreads = c
-      for (const [n, st] of th.stacks) matchedOpen.get(n)!.stack = st
+      const loose = wanted.length === 0 ? untrackedPrs(ctx.host.pullRequests, claimed) : []
+      // Work items' pull requests come first, so the bound never drops their threads for loose ones.
+      const open = new Map<number, PullRequestEvidence>([...matchedOpen, ...loose.map(p => [p.number, p] as const)])
+      const th = await readOpenDetails(run, ctx.dir, ctx.host, [...open.keys()])
+      for (const [n, c] of th.counts) open.get(n)!.unresolvedThreads = c
+      for (const [n, st] of th.stacks) open.get(n)!.stack = st
       if (th.error) notes.push(`${tag(ctx, multi)}Unresolved review threads unavailable: ${th.error}.`)
-      if (th.skipped > 0) notes.push(`${tag(ctx, multi)}Review threads were read for ${matchedOpen.size - th.skipped} of ${matchedOpen.size} open pull requests (bounded).`)
+      if (th.skipped > 0) notes.push(`${tag(ctx, multi)}Review threads were read for ${open.size - th.skipped} of ${open.size} open pull requests (bounded).`)
+      for (const p of loose) {
+        const { body: _body, authorIsBot: _bot, ...shown } = p
+        const age = Date.parse(p.updatedAt)
+        untracked.push({
+          ...shown,
+          ...(Number.isFinite(age) ? { ageSeconds: Math.max(0, Math.round((now.getTime() - age) / 1000)) } : {}),
+          ...(multi ? { repo: ctx.dir } : {}),
+        })
+      }
       if (ctx.host.truncated) notes.push(`${tag(ctx, multi)}The pull request listing hit its limit; older pull requests may be missing.`)
     }
   }
@@ -272,5 +307,6 @@ export async function buildStatus(deps: Deps, options: StatusOptions): Promise<S
     },
     notes,
     items: statuses,
+    untracked: untracked.sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0) || a.number - b.number),
   }
 }

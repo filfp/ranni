@@ -14,9 +14,21 @@ export interface HostRead {
   owner?: string
   repo?: string
   /** Every listed pull request, unfiltered. */
-  pullRequests: (PullRequestEvidence & { body: string; head: string })[]
+  pullRequests: HostPullRequest[]
   /** True when the listing hit the limit and older pull requests may be missing. */
   truncated: boolean
+}
+
+/** A listed pull request with the fields used to match it and to show it when no work item claims it. */
+export type HostPullRequest = PullRequestEvidence & {
+  body: string
+  head: string
+  /** Login of the author; empty when the host reports none (a deleted account). */
+  author: string
+  /** The host reports the author as a bot or app account. */
+  authorIsBot: boolean
+  /** ISO date of the last update the host reports. */
+  updatedAt: string
 }
 
 const NONE: HostRead = { available: false, pullRequests: [], truncated: false }
@@ -32,8 +44,8 @@ export function classifyGhFailure(stderr: string, missing: boolean): string {
   return `gh failed: ${s.split('\n')[0] || 'no output'}`
 }
 
-const LIGHT_FIELDS = 'number,title,body,headRefName,baseRefName,state,url'
-const FULL_FIELDS = 'number,title,body,headRefName,baseRefName,state,isDraft,reviewDecision,statusCheckRollup,url'
+const LIGHT_FIELDS = 'number,title,body,headRefName,baseRefName,state,url,author,updatedAt'
+const FULL_FIELDS = 'number,title,body,headRefName,baseRefName,state,isDraft,reviewDecision,statusCheckRollup,url,author,updatedAt'
 
 function parseList(stdout: string): Record<string, unknown>[] | undefined {
   try {
@@ -91,8 +103,10 @@ export async function readHost(run: Runner, cwd: string): Promise<HostRead> {
   }
 }
 
-export function parsePr(p: Record<string, unknown>): PullRequestEvidence & { body: string; head: string } {
+export function parsePr(p: Record<string, unknown>): HostPullRequest {
   const state = String(p.state ?? '').toUpperCase()
+  const a = (p.author ?? {}) as { login?: unknown; is_bot?: unknown }
+  const login = typeof a.login === 'string' ? a.login : ''
   return {
     number: Number(p.number),
     title: String(p.title ?? ''),
@@ -104,6 +118,9 @@ export function parsePr(p: Record<string, unknown>): PullRequestEvidence & { bod
     baseRef: String(p.baseRefName ?? ''),
     reviewDecision: String(p.reviewDecision ?? '') as ReviewDecision,
     failingChecks: countFailingChecks(p.statusCheckRollup),
+    author: login,
+    authorIsBot: a.is_bot === true || login.startsWith('app/') || login.endsWith('[bot]'),
+    updatedAt: String(p.updatedAt ?? ''),
   }
 }
 
@@ -114,6 +131,15 @@ export function parsePr(p: Record<string, unknown>): PullRequestEvidence & { bod
  */
 export function prsFor<T extends { title: string; body: string; head: string }>(prs: T[], id: string, key = 'Work'): T[] {
   return prs.filter(p => mentions(p.title, id) || mentions(p.head, id) || declaresWork(p.body, id, key))
+}
+
+/**
+ * Open pull requests no work item claims, without bot or app authors: the work the frontier
+ * does not know about yet, such as a developer who works outside Ranni. Merged and closed ones
+ * are history and stay out. `claimed` holds the numbers some work item's evidence already took.
+ */
+export function untrackedPrs<T extends HostPullRequest>(prs: T[], claimed: Set<number>): T[] {
+  return prs.filter(p => p.state === 'OPEN' && !p.authorIsBot && !claimed.has(p.number))
 }
 
 /**

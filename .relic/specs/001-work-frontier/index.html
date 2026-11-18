@@ -176,7 +176,7 @@
         <tr>
           <td>Git host</td>
           <td>one pull request listing, matched locally by identity</td>
-          <td>state, review decision, unresolved threads, checks, GitHub stack position</td>
+          <td>state, review decision, unresolved threads, checks, GitHub stack position; open pull requests no work item claims</td>
         </tr>
       </tbody>
     </table>
@@ -207,6 +207,16 @@
       GraphQL call as review threads, and a host without stacked pull requests simply reports
       none. It is evidence, not blocking: status shows <code>stack #24 3 of 6</code> and does
       not decide that position 3 must wait.
+    </p>
+    <p id="untracked">
+      Not every developer works through Ranni, but every change reaches the Git host as a pull
+      request. So status also lists the open pull requests no work item claims, after the
+      board: author, head branch, last update and the same review evidence. They come from
+      the listing status already reads, so they cost no extra call. Bot and app authors stay
+      out, as do merged and closed pull requests, which are history. They are evidence of
+      work outside the frontier, not work items: Ranni never creates a work item for one.
+      Adopting one is the reader's call, by writing a work item the pull request names.
+      Narrowing status to ids leaves them out.
     </p>
     <p>Each work item gets the first label that applies:</p>
     <ol>

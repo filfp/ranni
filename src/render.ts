@@ -1,5 +1,5 @@
 import { isMergedPr } from './derive'
-import type { ItemStatus, StatusModel } from './status'
+import type { ItemStatus, StatusModel, UntrackedPullRequest } from './status'
 import { LABEL_ORDER, LABEL_TEXT } from './types'
 
 export function formatAge(seconds: number): string {
@@ -19,7 +19,7 @@ export function formatAge(seconds: number): string {
 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
 
-function prLine(p: ItemStatus['pullRequests'][number], defaultBranch?: string): string {
+function prLine(p: ItemStatus['pullRequests'][number], defaultBranch?: string, number = true): string {
   const bits: string[] = []
   if (p.stack) {
     const onto = p.stack.base && p.stack.base !== defaultBranch ? ` onto ${p.stack.base}` : ''
@@ -30,7 +30,8 @@ function prLine(p: ItemStatus['pullRequests'][number], defaultBranch?: string): 
   if (p.unresolvedThreads) bits.push(plural(p.unresolvedThreads, 'unresolved thread'))
   if (p.failingChecks) bits.push(plural(p.failingChecks, 'failing check'))
   const draft = p.isDraft ? ' (draft)' : ''
-  return `PR #${p.number}${draft}${bits.length ? ' ' + bits.join(' · ') : ''}`
+  const head = number ? `PR #${p.number}${draft}` : draft.trim()
+  return [head, bits.join(' · ')].filter(Boolean).join(' ')
 }
 
 /** Evidence lines shown under an item, depending on its label. Pure. */
@@ -60,6 +61,22 @@ export function detailLines(it: ItemStatus, defaultBranch?: string): string[] {
   return lines
 }
 
+/** Open pull requests no work item claims, shown after the board. Pure. */
+export function untrackedLines(prs: UntrackedPullRequest[], kind: string, defaultBranch?: string): string[] {
+  if (prs.length === 0) return []
+  const out = ['', `Pull requests with no ${kind} (${prs.length})`]
+  const numW = Math.max(...prs.map(p => String(p.number).length)) + 1
+  for (const p of prs) {
+    const age = p.ageSeconds !== undefined ? formatAge(p.ageSeconds) : '-'
+    const who = p.author ? `  ·  @${p.author}` : ''
+    const where = p.repo ? `  ·  ${p.repo}` : ''
+    out.push(`  ${`#${p.number}`.padEnd(numW)}  ${p.title}${who}  ·  ${age}${where}`)
+    const detail = [p.head, prLine(p, defaultBranch, false)].filter(Boolean).join('  ·  ')
+    if (detail) out.push(`  ${' '.repeat(numW)}  ${detail}`)
+  }
+  return out
+}
+
 export function renderHuman(m: StatusModel): string {
   const out: string[] = []
   const n = m.items.length
@@ -67,6 +84,7 @@ export function renderHuman(m: StatusModel): string {
   for (const note of m.notes) out.push(`! ${note}`)
   if (n === 0) {
     out.push('', `No work items of kind "${m.kind}".`)
+    out.push(...untrackedLines(m.untracked ?? [], m.kind, m.defaultBranch))
     return out.join('\n') + '\n'
   }
   const idW = Math.max(...m.items.map(i => i.id.length))
@@ -82,5 +100,6 @@ export function renderHuman(m: StatusModel): string {
       for (const l of detailLines(it, m.defaultBranch)) out.push(`  ${' '.repeat(idW)}  ${l}`)
     }
   }
+  out.push(...untrackedLines(m.untracked ?? [], m.kind, m.defaultBranch))
   return out.join('\n') + '\n'
 }
